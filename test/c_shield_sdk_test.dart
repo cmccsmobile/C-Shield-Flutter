@@ -100,12 +100,6 @@ class _MockPlatform with MockPlatformInterfaceMixin implements CShieldSdkPlatfor
     throw UnimplementedError();
   }
   
-  @override
-  Stream<LoadAppThreatEvent> threatEvents() {
-    // TODO: implement threatEvents
-    throw UnimplementedError();
-  }
-
 }
 
 void main() {
