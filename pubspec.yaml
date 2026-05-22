@@ -1,6 +1,6 @@
 name: c_shield_sdk
 description: "CMC Cyber Security's C-Shield SDK for Flutter is a powerful security solution designed to protect your Flutter applications from various threats and vulnerabilities. It provides a comprehensive set of features to enhance the security of your app, including data encryption, secure storage, and protection against common attack vectors. With C-Shield SDK, you can ensure that your users' data is safe and secure while providing a seamless user experience."
-version: 1.0.1
+version: 1.0.2
 
 homepage: https://github.com/cmccsmobile/C-Shield-Flutter
 repository: https://github.com/cmccsmobile/C-Shield-Flutter

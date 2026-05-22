@@ -4,3 +4,6 @@
 
 ## 1.0.1
 - Update document
+
+## 1.0.2
+- Link IOS setup document
