@@ -1,0 +1,1 @@
+enum ThreatDetectedAction { killApp, notifyApp }

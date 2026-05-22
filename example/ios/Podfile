@@ -1,0 +1,80 @@
+# Uncomment this line to define a global platform for your project
+# platform :ios, '13.0'
+
+ENV['COCOAPODS_DISABLE_STATS'] = 'true'
+
+project 'Runner', {
+  'Debug' => :debug,
+  'Profile' => :release,
+  'Release' => :release,
+}
+
+def flutter_root
+  generated_xcode_build_settings_path = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
+  unless File.exist?(generated_xcode_build_settings_path)
+    raise "#{generated_xcode_build_settings_path} must exist. If you're running pod install manually, make sure flutter pub get is executed first"
+  end
+
+  File.foreach(generated_xcode_build_settings_path) do |line|
+    matches = line.match(/FLUTTER_ROOT\=(.*)/)
+    return matches[1].strip if matches
+  end
+  raise "FLUTTER_ROOT not found in #{generated_xcode_build_settings_path}. Try deleting Generated.xcconfig, then run flutter pub get"
+end
+
+require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelper'), flutter_root)
+
+flutter_ios_podfile_setup
+
+target 'Runner' do
+  use_frameworks!
+
+  # CShieldSDK KHÔNG dùng pod — được link qua OTHER_LDFLAGS (-framework CShieldSDK)
+  # và Framework Search Paths set trong post_install bên dưới (variant-specific).
+  # OpenSSL được add thủ công trong Xcode → Embed & Sign (xem ios-host-app-integration.md bước 4).
+  # Cần đặt file theo cấu trúc:
+  #   Libs/OpenSSL.xcframework           ← add vào Xcode Embed & Sign thủ công
+  #   Libs/Debug/CShieldSDK.xcframework  ← CShieldSDK-Debug.xcframework đã đổi tên
+  #   Libs/Release/CShieldSDK.xcframework
+
+  flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+  target 'RunnerTests' do
+    inherit! :search_paths
+  end
+end
+
+post_install do |installer|
+  # 1. Pod targets (Pods.xcodeproj) — để plugin c_shield_sdk compile được import CShieldSDK
+  installer.pods_project.targets.each do |target|
+    flutter_additional_ios_build_settings(target)
+
+    target.build_configurations.each do |config|
+      variant = (config.name == 'Debug') ? 'Debug' : 'Release'
+
+      existing = Array(config.build_settings['FRAMEWORK_SEARCH_PATHS']).flatten
+      existing = ['$(inherited)'] if existing.empty?
+
+      config.build_settings['FRAMEWORK_SEARCH_PATHS'] = (existing + [
+        "\"$(PODS_ROOT)/../Libs/#{variant}/CShieldSDK.xcframework/ios-arm64\"",
+        "\"$(PODS_ROOT)/../Libs/#{variant}/CShieldSDK.xcframework/ios-arm64_x86_64-simulator\"",
+      ]).uniq
+    end
+  end
+
+  # 2. Aggregate xcconfig (Pods-Runner.debug/release.xcconfig) — để Runner app link được CShieldSDK
+  # Đây là file Runner.xcodeproj include, tương đương bước "Framework Search Paths" trong Xcode.
+  installer.aggregate_targets.each do |aggregate_target|
+    aggregate_target.xcconfigs.each do |config_name, xcconfig|
+      variant = (config_name == 'Debug') ? 'Debug' : 'Release'
+
+      paths = [
+        "\"$(PODS_ROOT)/../Libs/#{variant}/CShieldSDK.xcframework/ios-arm64\"",
+        "\"$(PODS_ROOT)/../Libs/#{variant}/CShieldSDK.xcframework/ios-arm64_x86_64-simulator\"",
+      ]
+
+      existing = xcconfig.attributes['FRAMEWORK_SEARCH_PATHS'] || '$(inherited)'
+      xcconfig.attributes['FRAMEWORK_SEARCH_PATHS'] = ([existing] + paths).uniq.join(' ')
+      xcconfig.save_as(aggregate_target.xcconfig_path(config_name))
+    end
+  end
+end
