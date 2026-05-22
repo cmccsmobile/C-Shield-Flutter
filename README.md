@@ -117,7 +117,7 @@ flutter build appbundle --release
 
 ### 1.3 Cấu hình iOS
 
-Vui lòng đọc và làm theo các bước tại [iOS Integration Guide](docs/ios-host-app-integration.md).
+Vui lòng đọc và làm theo các bước tại [iOS Integration Guide](doc/ios-host-app-integration.md).
 
 ---
 
