@@ -7,3 +7,6 @@
 
 ## 1.0.2
 - Link IOS setup document
+
+## 1.0.3
+- Update IOS integration document

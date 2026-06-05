@@ -15,7 +15,7 @@ Plugin `c_shield_sdk` không bundle XCFramework. Host app chịu trách nhiệm 
 
 ## Bước 1 — Nhận file từ CShield team
 
-Sau khi nhận được các file XCFramework bao gồm:
+Nhận đủ các file XCFramework bao gồm:
 
 ```
 - CShieldSDK.xcframework          ← Release variant
@@ -27,20 +27,34 @@ Sau khi nhận được các file XCFramework bao gồm:
 
 ## Bước 2 — Tổ chức thư mục `Libs/`
 
-Tạo thư mục `Libs/` trong `ios/` của dự án Flutter:
+Dùng Xcode mở thư mục `ios` của dự án Flutter theo đường dẫn `<your_app>/ios/Runner.xcworkspace`. Tạo thư mục `Libs` trong `Runner`, rồi tạo tiếp các thư mục con `Debug` và `Release` trong `Libs`:
 
 ```
-<your_app>/ios/
-└── Libs/
-    ├── OpenSSL.xcframework                     ← copy từ build/
-    ├── Debug/
-    │   └── CShieldSDK.xcframework              ← copy CShieldSDK-Debug.xcframework, đổi tên
-    └── Release/
-        └── CShieldSDK.xcframework              ← copy CShieldSDK.xcframework (release)
+Runner
+├── Libs/                                       ← thư mục mới tạo
+│   ├── OpenSSL.xcframework                     ← copy từ build/
+│   ├── Debug/
+│   │   └── CShieldSDK.xcframework              ← copy CShieldSDK-Debug.xcframework, đổi tên
+│   └── Release/
+│       └── CShieldSDK.xcframework              ← copy CShieldSDK.xcframework (release)
+├── Flutter/
+├── Products/
+├── Pods/
+├── Framework/
+└── ...
+
 ```
 
 > **Lưu ý:** `CShieldSDK-Debug.xcframework` phải được **đổi tên** thành `CShieldSDK.xcframework`
 > khi đặt vào thư mục `Debug/`.
+
+> **Lưu ý:** Phải **kéo thả** từng file
+> `.xcframework` vào đúng vị trí tương ứng trong Xcode Project Navigator:
+> - `OpenSSL.xcframework` → kéo vào nhóm `Libs/`
+> - `CShieldSDK.xcframework` (Debug) → kéo vào nhóm `Libs/Debug/`
+> - `CShieldSDK.xcframework` (Release) → kéo vào nhóm `Libs/Release/`
+>
+> Nếu không kéo thả, Xcode sẽ không nhận ra các framework này trong project.
 
 ---
 
@@ -124,7 +138,16 @@ else
   SLICE="ios-arm64"
 fi
 
-SRC="${PROJECT_DIR}/Libs/${CONFIGURATION}/CShieldSDK.xcframework/${SLICE}/CShieldSDK.framework"
+# Normalize configuration name to Debug or Release.
+# Flutter flavors tạo ra tên config dạng "Debug-production", "Release-production",
+# "Profile-production"... không khớp với tên thư mục trong Libs/.
+if [[ "$CONFIGURATION" == *"Release"* ]] || [[ "$CONFIGURATION" == *"Profile"* ]]; then
+  LIB_CONFIG="Release"
+else
+  LIB_CONFIG="Debug"
+fi
+
+SRC="${PROJECT_DIR}/Libs/${LIB_CONFIG}/CShieldSDK.xcframework/${SLICE}/CShieldSDK.framework"
 DEST="${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}/CShieldSDK.framework"
 
 mkdir -p "${DEST}"
@@ -168,4 +191,50 @@ $(BUILT_PRODUCTS_DIR)/$(FRAMEWORKS_FOLDER_PATH)/CShieldSDK.framework
 | Embed OpenSSL (Xcode — Bước 4a) | `OpenSSL.xcframework` được đóng gói vào app bundle | Bước 5: Embed & Sign |
 | Run Script "Embed CShieldSDK" (Xcode — Bước 4c) | Copy đúng variant (Debug/Release) vào app bundle lúc build | Bước 9: Run Script Phase |
 | Tắt User Script Sandboxing (Xcode — Bước 4b) | Cho phép Run Script truy cập file ngoài sandbox | Bước 8: User Script Sandboxing |
+
+---
+
+## Troubleshooting
+
+### Build simulator lỗi: `(l)stat: No such file or directory` tại `Libs/Debug-production/...`
+
+**Nguyên nhân**: Khi project dùng Flutter flavors (e.g. `production`, `development`), Xcode đặt tên build configuration theo dạng `Debug-production`, `Release-production`, `Profile-production`... thay vì `Debug`/`Release` thuần. Script trong phase "Embed CShieldSDK" dùng `${CONFIGURATION}` trực tiếp làm tên thư mục, nên tìm `Libs/Debug-production/` nhưng thư mục đó không tồn tại.
+
+**Fix**: Thêm bước chuẩn hóa trong script trước khi dùng làm đường dẫn (script đã được cập nhật ở Bước 4c phía trên). Nếu đã cấu hình thủ công bằng script cũ, sửa lại bằng cách thêm đoạn sau vào script, trước dòng `SRC=...`:
+
+```bash
+if [[ "$CONFIGURATION" == *"Release"* ]] || [[ "$CONFIGURATION" == *"Profile"* ]]; then
+  LIB_CONFIG="Release"
+else
+  LIB_CONFIG="Debug"
+fi
+```
+
+Và thay `${CONFIGURATION}` → `${LIB_CONFIG}` trong dòng `SRC=...`.
+
+---
+
+### `pod install` báo lỗi: `Unable to find compatibility version string for object version 74`
+
+**Nguyên nhân**: Xcode 16 (một số phiên bản beta/RC) lưu project với `objectVersion = 74`. xcodeproj gem (dùng trong CocoaPods 1.16.x) chỉ biết các giá trị `60` (Xcode 15.0), `63` (Xcode 15.3), `77` (Xcode 16.0 final) — bỏ qua `74`.
+
+**Fix**: Mở `ios/Runner.xcodeproj/project.pbxproj`, tìm dòng đầu file và sửa:
+
+```
+objectVersion = 74;
+```
+thành:
+```
+objectVersion = 77;
+```
+
+---
+
+### `pod install` in warning: `Xcodeproj doesn't know about the following attributes {"attributesByRelativePath" => ...} for the 'PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet'`
+
+**Đây là warning vô hại**, không gây pod install thất bại.
+
+**Giải thích**: Khi thực hiện Bước 4a (thêm `OpenSSL.xcframework` vào "Embed & Sign" trong Xcode UI), Xcode tự động tạo ra một entry kiểu `PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet` trong `project.pbxproj` để lưu các thuộc tính `CodeSignOnCopy` / `RemoveHeadersOnCopy`. Entry này sinh ra vì thư mục `Libs/` được Xcode quản lý dưới dạng **File System Synchronized Root Group** (tính năng Xcode 15+). xcodeproj gem biết ISA này nhưng chưa biết attribute `attributesByRelativePath` bên trong nó nên in cảnh báo.
+
+`pod install` **không ghi đè** `Runner/project.pbxproj` nên attribute được giữ nguyên — OpenSSL vẫn được embed với `CodeSignOnCopy` + `RemoveHeadersOnCopy` đúng cách khi build trong Xcode.
 
