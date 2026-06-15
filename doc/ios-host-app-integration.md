@@ -82,19 +82,21 @@ post_install do |installer|
     end
   end
 
-  # 2. Aggregate xcconfig (Pods-Runner.debug/release.xcconfig) — để Runner app link được CShieldSDK. Tương đương bước set "Framework Search Paths" thủ công trong Xcode.
+  # 2. Aggregate xcconfig (Pods-Runner.debug/release.xcconfig) — dùng sdk-conditional paths
+  # để linker chọn đúng slice của xcframework (simulator vs device).
+  # Không dùng FRAMEWORK_SEARCH_PATHS non-conditional vì Xcode tìm theo thứ tự và sẽ
+  # link nhầm ios-arm64 (device binary) khi build simulator.
   installer.aggregate_targets.each do |aggregate_target|
     aggregate_target.xcconfigs.each do |config_name, xcconfig|
       variant = (config_name == 'Debug') ? 'Debug' : 'Release'
+      xcconfig_path = aggregate_target.xcconfig_path(config_name).to_s
 
-      paths = [
-        "\"$(PODS_ROOT)/../Libs/#{variant}/CShieldSDK.xcframework/ios-arm64\"",
-        "\"$(PODS_ROOT)/../Libs/#{variant}/CShieldSDK.xcframework/ios-arm64_x86_64-simulator\"",
-      ]
-
-      existing = xcconfig.attributes['FRAMEWORK_SEARCH_PATHS'] || '$(inherited)'
-      xcconfig.attributes['FRAMEWORK_SEARCH_PATHS'] = ([existing] + paths).uniq.join(' ')
       xcconfig.save_as(aggregate_target.xcconfig_path(config_name))
+
+      File.open(xcconfig_path, 'a') do |f|
+        f.puts "FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*] = $(inherited) \"$(PODS_ROOT)/../Libs/#{variant}/CShieldSDK.xcframework/ios-arm64_x86_64-simulator\""
+        f.puts "FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*] = $(inherited) \"$(PODS_ROOT)/../Libs/#{variant}/CShieldSDK.xcframework/ios-arm64\""
+      end
     end
   end
 end
@@ -195,6 +197,22 @@ $(BUILT_PRODUCTS_DIR)/$(FRAMEWORKS_FOLDER_PATH)/CShieldSDK.framework
 ---
 
 ## Troubleshooting
+
+### Build simulator lỗi: `linking in dylib built for 'iOS'`
+
+**Triệu chứng**:
+
+```
+Error (Xcode): Building for 'iOS-simulator', but linking in dylib
+(.../CShieldSDK.xcframework/ios-arm64/CShieldSDK.framework/CShieldSDK) built for 'iOS'
+Error (Xcode): Linker command failed with exit code 1
+```
+
+**Nguyên nhân**: Khi `FRAMEWORK_SEARCH_PATHS` chứa cả hai slice path không có điều kiện, Xcode tìm `CShieldSDK.framework` theo thứ tự trong danh sách. Nếu `ios-arm64` (device binary) đứng trước `ios-arm64_x86_64-simulator`, Xcode sẽ link nhầm binary dành cho device ngay cả khi đang build cho simulator — bỏ qua hoàn toàn cơ chế slice-selection của xcframework.
+
+**Fix**: Dùng xcconfig conditional syntax `[sdk=...]` ở phần aggregate xcconfig trong `post_install` để mỗi SDK chỉ thấy đúng slice path của mình (đã áp dụng trong Bước 3 ở trên). Sau khi sửa Podfile, chạy lại `pod install`.
+
+---
 
 ### Build simulator lỗi: `(l)stat: No such file or directory` tại `Libs/Debug-production/...`
 
