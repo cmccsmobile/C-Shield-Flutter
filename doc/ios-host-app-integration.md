@@ -68,17 +68,29 @@ post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
 
-    # 1. Pod targets — để plugin c_shield_sdk compile được `import CShieldSDK`
+    # 1. Pod targets — để plugin c_shield_sdk compile được `import CShieldSDK`.
+    # Dùng sdk-conditional paths để linker chọn đúng slice (simulator vs device).
+    # KHÔNG thêm cả hai slice non-conditional: Xcode dò theo thứ tự và sẽ link nhầm
+    # ios-arm64 (device binary) khi build simulator → "Building for iOS-simulator,
+    # but linking in dylib built for iOS".
     target.build_configurations.each do |config|
       variant = (config.name == 'Debug') ? 'Debug' : 'Release'
 
-      existing = Array(config.build_settings['FRAMEWORK_SEARCH_PATHS']).flatten
-      existing = ['$(inherited)'] if existing.empty?
+      # Chỉ thêm slice CShieldSDK vào các biến CÓ ĐIỀU KIỆN [sdk=...], và phải
+      # GIỮ LẠI giá trị conditional sẵn có — flutter_additional_ios_build_settings
+      # đã đặt path Flutter engine vào đây. Nếu ghi đè sẽ mất path Flutter ⇒
+      # "Unable to find module 'Flutter'". KHÔNG đụng vào FRAMEWORK_SEARCH_PATHS
+      # non-conditional và KHÔNG thêm cả hai slice chung một biến (Xcode dò theo
+      # thứ tự → link nhầm ios-arm64 device khi build simulator).
+      config.build_settings['FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]'] = (
+        ['$(inherited)'] + Array(config.build_settings['FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]']).flatten +
+        ["\"$(PODS_ROOT)/../Libs/#{variant}/CShieldSDK.xcframework/ios-arm64\""]
+      ).uniq
 
-      config.build_settings['FRAMEWORK_SEARCH_PATHS'] = (existing + [
-        "\"$(PODS_ROOT)/../Libs/#{variant}/CShieldSDK.xcframework/ios-arm64\"",
-        "\"$(PODS_ROOT)/../Libs/#{variant}/CShieldSDK.xcframework/ios-arm64_x86_64-simulator\"",
-      ]).uniq
+      config.build_settings['FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*]'] = (
+        ['$(inherited)'] + Array(config.build_settings['FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*]']).flatten +
+        ["\"$(PODS_ROOT)/../Libs/#{variant}/CShieldSDK.xcframework/ios-arm64_x86_64-simulator\""]
+      ).uniq
     end
   end
 
@@ -120,6 +132,8 @@ Mở `Runner.xcworkspace` trong Xcode.
 `Runner target → General → Frameworks, Libraries, and Embedded Content → +`
 
 Chọn `Libs/OpenSSL.xcframework`, cột **Embed** đặt thành **Embed & Sign**.
+
+Nếu thấy `CShieldSDK.xcframework`, click chọn rồi xoá `CShieldSDK.xcframework` bằng dấu `-`
 
 ### 4b. Tắt User Script Sandboxing
 

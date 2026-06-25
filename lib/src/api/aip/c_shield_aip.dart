@@ -1,6 +1,8 @@
 import 'dart:typed_data';
 
+import '../../internal/aip/aip_normalizer.dart';
 import '../../internal/platform/c_shield_sdk_platform_interface.dart';
+import '../exceptions/c_shield_exception.dart';
 
 /// Low-level AIP (API Integrity Protection) API.
 ///
@@ -34,6 +36,14 @@ import '../../internal/platform/c_shield_sdk_platform_interface.dart';
 class CShieldAIP {
   CShieldAIP._();
 
+  /// Freshness window (seconds) for response timestamps — guards against
+  /// replay and clock skew. Must match the native interceptors
+  /// (`RESPONSE_FRESHNESS_SECONDS` on Android/iOS) and the server's
+  /// `requestTimeoutSeconds`.
+  static const int _responseFreshnessSeconds = 30;
+
+  static int _nowSeconds() => DateTime.now().millisecondsSinceEpoch ~/ 1000;
+
   // ── Mode 2a: Standalone — caller constructs payload manually ─────────────
 
   /// Signs a raw [payload] string and returns the signature.
@@ -61,11 +71,15 @@ class CShieldAIP {
   /// - For `multipart/form-data`: text fields only, sorted, JSON-encoded.
   /// - For other types: raw bytes as UTF-8 string.
   ///
+  /// Computed entirely in Dart (see [AIPNormalizer]) — byte-identical to the
+  /// native implementation — so it does not cross the method channel.
+  ///
   /// Pass the `hash` value when building a payload for [sign].
   static Future<Map<String, dynamic>> normalizeBody({
     required Uint8List body,
     String contentType = 'application/json',
-  }) => CShieldSdkPlatform.instance.aipNormalizeBody(contentType: contentType, body: body);
+  }) async =>
+      AIPNormalizer.normalizeBodyForSigning(body: body, contentType: contentType).toMap();
 
   // ── Mode 2b: Interceptor helpers — SDK constructs payload automatically ───
 
@@ -74,33 +88,76 @@ class CShieldAIP {
   /// [path] must be the URL path only (no query string).
   /// [body] should be normalized multipart bytes for file-upload requests
   /// (see [normalizeBody]) or raw JSON/text bytes for regular requests.
+  ///
+  /// The payload (`{method}.{path}.{timestamp}.{bodyHash}`) is built in Dart;
+  /// only the cryptographic [sign] crosses to native.
   static Future<Map<String, String>> signRequest({
     required String method,
     required String path,
     required Uint8List body,
     String contentType = 'application/json',
-  }) => CShieldSdkPlatform.instance.aipSignRequest(
-        method: method,
-        path: path,
-        headers: const {},
-        body: body,
-        contentType: contentType,
-      );
+  }) async {
+    final normalized =
+        AIPNormalizer.normalizeBodyForSigning(body: body, contentType: contentType);
+    final timestamp = _nowSeconds();
+    final payload = '$method.$path.$timestamp.${normalized.hash}';
+    final signature = await sign(payload);
+    return {
+      'cs-timestamp': '$timestamp',
+      'cs-signature': signature,
+    };
+  }
 
   /// Verifies the AIP signature on an incoming response.
   ///
   /// [headers] must contain `cs-timestamp` and `cs-signature`.
   /// [body] must be the raw response bytes (not decoded).
-  /// Throws [CShieldException] on failure.
+  ///
+  /// The timestamp window check and payload (`{statusCode}.{path}.{timestamp}.
+  /// {bodyHash}`) are computed in Dart; only the cryptographic [verify] crosses
+  /// to native. Throws [CShieldException] on failure.
   static Future<void> verifyResponse({
     required int statusCode,
     required String path,
     required Map<String, String> headers,
     required Uint8List body,
-  }) => CShieldSdkPlatform.instance.aipVerifyResponse(
-        statusCode: statusCode,
-        path: path,
-        headers: headers,
-        body: body,
+  }) async {
+    final lower = {
+      for (final e in headers.entries) e.key.toLowerCase(): e.value,
+    };
+
+    final timestampStr = lower['cs-timestamp'];
+    if (timestampStr == null) {
+      throw const CShieldException(
+        CShieldErrorCode.aipMissingHeader,
+        "Not found cs-timestamp in response's header",
       );
+    }
+    final timestamp = int.tryParse(timestampStr);
+    if (timestamp == null) {
+      throw const CShieldException(
+        CShieldErrorCode.aipTimestampExpired,
+        'Invalid cs-timestamp format',
+      );
+    }
+    if ((_nowSeconds() - timestamp).abs() > _responseFreshnessSeconds) {
+      throw const CShieldException(
+        CShieldErrorCode.aipTimestampExpired,
+        'Timeout response handle',
+      );
+    }
+
+    final signature = lower['cs-signature'];
+    if (signature == null) {
+      throw const CShieldException(
+        CShieldErrorCode.aipMissingHeader,
+        "Not found cs-signature in response's header",
+      );
+    }
+
+    // Hash the raw response bytes as-is, exactly like native validateResponse.
+    final bodyHash = AIPNormalizer.sha256Hex(body);
+    final payload = '$statusCode.$path.$timestamp.$bodyHash';
+    await verify(payload: payload, signature: signature);
+  }
 }

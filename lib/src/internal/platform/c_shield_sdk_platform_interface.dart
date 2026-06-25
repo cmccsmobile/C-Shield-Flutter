@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'c_shield_sdk_method_channel.dart';
 
@@ -65,33 +64,16 @@ abstract class CShieldSdkPlatform extends PlatformInterface {
     required String host,
   }) => throw UnimplementedError();
 
-  // ── AIP: standalone ──────────────────────────────────────────────────────
+  // ── AIP ──────────────────────────────────────────────────────────────────
+  // Only the cryptographic sign/verify cross to native (they need the device
+  // key and proxy-CA check). Body normalization, payload construction, hashing
+  // and the timestamp-window check all happen in Dart (see AIPNormalizer /
+  // CShieldAIP) — no fabricated request URL required.
   Future<String> aipSign({required String payload}) => throw UnimplementedError();
 
   Future<void> aipVerify({
     required String payload,
     required String signature,
-  }) => throw UnimplementedError();
-
-  Future<Map<String, dynamic>> aipNormalizeBody({
-    required String contentType,
-    required Uint8List body,
-  }) => throw UnimplementedError();
-
-  // ── AIP: interceptor-style ────────────────────────────────────────────────
-  Future<Map<String, String>> aipSignRequest({
-    required String method,
-    required String path,
-    required Map<String, String> headers,
-    required Uint8List body,
-    required String contentType,
-  }) => throw UnimplementedError();
-
-  Future<void> aipVerifyResponse({
-    required int statusCode,
-    required String path,
-    required Map<String, String> headers,
-    required Uint8List body,
   }) => throw UnimplementedError();
 
 }

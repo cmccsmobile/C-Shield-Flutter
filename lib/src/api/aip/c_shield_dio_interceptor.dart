@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 
+import '../../internal/aip/aip_normalizer.dart';
 import 'c_shield_aip.dart';
 
 /// A Dio [Interceptor] that automatically signs every outgoing request
@@ -105,10 +106,7 @@ class CShieldDioInterceptor extends Interceptor {
     final fields = <String, String>{
       for (final e in form.fields) e.key: e.value,
     };
-    final sorted = Map.fromEntries(
-      fields.entries.toList()..sort((a, b) => a.key.compareTo(b.key)),
-    );
-    return Uint8List.fromList(utf8.encode(jsonEncode(sorted)));
+    return AIPNormalizer.normalizeFields(fields);
   }
 
   static String _contentType(RequestOptions options) {

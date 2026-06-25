@@ -17,13 +17,10 @@ class CShieldChannels {
   static const String sslIsConfigured = 'ssl.isConfigured';
   static const String sslCheckServerTrusted = 'ssl.checkServerTrusted';
 
-  // Standalone — caller constructs payload manually (Android + iOS)
+  // AIP — only the cryptographic sign/verify cross to native. Body
+  // normalization, payload construction and the timestamp-window check are
+  // done in Dart (CShieldAIP / AIPNormalizer).
   static const String aipSign = 'aip.sign';
   static const String aipVerify = 'aip.verify';
-  static const String aipNormalizeBody = 'aip.normalizeBody';
-
-  // Interceptor-style — SDK auto-constructs payload from request/response (Android + iOS)
-  static const String aipSignRequest = 'aip.signRequest';
-  static const String aipVerifyResponse = 'aip.verifyResponse';
 
 }

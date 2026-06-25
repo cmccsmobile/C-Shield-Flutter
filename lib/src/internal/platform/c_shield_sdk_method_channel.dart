@@ -107,7 +107,9 @@ class MethodChannelCShieldSdk extends CShieldSdkPlatform {
         'host': host,
       });
 
-  // ── AIP: standalone ──────────────────────────────────────────────────────
+  // ── AIP ──────────────────────────────────────────────────────────────────
+  // Only sign/verify cross to native; normalization and payload construction
+  // are done in Dart (see CShieldAIP / AIPNormalizer).
 
   @override
   Future<String> aipSign({required String payload}) =>
@@ -121,52 +123,6 @@ class MethodChannelCShieldSdk extends CShieldSdkPlatform {
       _invoke(CShieldChannels.aipVerify, {
         'payload': payload,
         'signature': signature,
-      });
-
-  @override
-  Future<Map<String, dynamic>> aipNormalizeBody({
-    required String contentType,
-    required Uint8List body,
-  }) async {
-    final result = await _invoke<Map>(CShieldChannels.aipNormalizeBody, {
-      'contentType': contentType,
-      'body': body,
-    });
-    return result.cast<String, dynamic>();
-  }
-
-  // ── AIP: interceptor-style ────────────────────────────────────────────────
-
-  @override
-  Future<Map<String, String>> aipSignRequest({
-    required String method,
-    required String path,
-    required Map<String, String> headers,
-    required Uint8List body,
-    required String contentType,
-  }) async {
-    final result = await _invoke<Map>(CShieldChannels.aipSignRequest, {
-      'method': method,
-      'path': path,
-      'headers': headers,
-      'body': body,
-      'contentType': contentType,
-    });
-    return result.cast<String, String>();
-  }
-
-  @override
-  Future<void> aipVerifyResponse({
-    required int statusCode,
-    required String path,
-    required Map<String, String> headers,
-    required Uint8List body,
-  }) =>
-      _invoke(CShieldChannels.aipVerifyResponse, {
-        'statusCode': statusCode,
-        'path': path,
-        'headers': headers,
-        'body': body,
       });
 
 }

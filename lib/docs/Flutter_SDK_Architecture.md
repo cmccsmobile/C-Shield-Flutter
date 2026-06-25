@@ -79,8 +79,7 @@
 │  • CShieldSdkPlugin             │  • CShieldSdkPlugin                │
 │  • RaspBridge                   │  • RaspBridge                      │
 │  • SslBridge                    │  • SslBridge                       │
-│  • AipBridge (signRequest,      │  • AipBridge (intercept,           │
-│    verifyResponse, normalize)   │    interceptResponse)              │
+│  • AipBridge (sign, verify)     │  • AipBridge (sign, verify)        │
 │  • HttpBridge (OkHttp client    │  • HttpBridge (URLSession của      │
 │    có pinning + interceptor)    │    CShieldSSL)                     │
 │  • RaspEventStreamHandler       │  • RaspEventStreamHandler          │
@@ -453,9 +452,8 @@ Tất cả request → response 1-1 đi qua channel này. Method name dùng dot-
 | `ssl.configure` | `{pins: List<String>, hostname: String}` | `null` | invalidArgument |
 | `ssl.updatePins` | `{pins, hostname}` | `null` | sslNotConfigured |
 | `ssl.isConfigured` | — | `bool` | — |
-| `aip.signRequest` | `{method, path, headers, body: Uint8List, contentType}` | `Map<String,String>` (cs-timestamp, cs-signature) | aipSigningFailed, aipDetectProxyCA |
-| `aip.verifyResponse` | `{statusCode, path, headers, body: Uint8List}` | `null` | aipMissingHeader, aipTimestampExpired, aipInvalidSignature, aipDetectProxyCA |
-| `aip.normalizeBody` | `{contentType, body: Uint8List, multipartFields?}` | `{normalizedString, sizeInBytes, hash}` | — |
+| `aip.sign` | `{payload}` | `String` signature | aipSigningFailed, aipDetectProxyCA |
+| `aip.verify` | `{payload, signature}` | `null` | aipInvalidSignature, aipDetectProxyCA |
 | `http.request` | `{method, url, headers, body: Uint8List}` | `{statusCode, headers: Map, body: Uint8List}` | aipDetectProxyCA, sslPinMismatch, network errors |
 
 **Lý do tách `http.request`** ra một method riêng: xem [§10.1](#101-vấn-đề-cốt-lõi-không-thể-inject-pinning-vào-dart-httpclient).
@@ -536,8 +534,8 @@ class CShieldSdkPlugin : FlutterPlugin, MethodCallHandler {
 | `rasp.quickCheck` | `checker.quickCheck()` → map enum → string |
 | `rasp.subscribe` | `checker.subscribe(detail, autoPopup) { result -> sink.success(...) }` |
 | `ssl.configure` | `CShieldSSL.configure(pins, hostname)` |
-| `aip.signRequest` | `AIPCore.sign(context, payload)` + tự build payload theo §3.4 |
-| `aip.verifyResponse` | `AIPCore.verifySign(context, payload, signature)` |
+| `aip.sign` | `AIPCore.sign(context, payload)` (payload do Dart build sẵn theo §3.4) |
+| `aip.verify` | `AIPCore.verifySign(context, payload, signature)` |
 | `http.request` | Build OkHttp request + execute với `OkHttpClient.Builder().sslSocketFactory(...).addInterceptor(CShieldInterceptor()).build()` |
 
 ### 7.3 Build config
@@ -678,8 +676,8 @@ public class CShieldSdkPlugin: NSObject, FlutterPlugin {
 | `detail` mode trong `subscribe` | ✅ | ❌ | Trên iOS: ignore param |
 | Tampering store list (`trustedStores`) | ✅ | ❌ | Trên iOS: silently ignore |
 | RASP watchdog thread chạy nền | ❌ | ✅ (sau initialize) | Document trong README |
-| `AIPCore.sign / verifySign` (manual) | ✅ (public) | ❌ (private) | Flutter SDK chỉ phơi `aip.signRequest`/`verifyResponse` ở mức request — không phơi raw sign cho v1 |
-| Body normalization rule (multipart) | ✅ | ✅ | Hành vi giống nhau — Flutter chỉ gửi raw bytes + content-type, native xử lý |
+| `AIPCore.sign / verifySign` (manual) | ✅ (public) | ❌ (private) | Flutter gọi xuống native qua `aip.sign`/`aip.verify`; payload do Dart build, native chỉ ký/verify |
+| Body normalization rule (multipart) | ✅ | ✅ | Hành vi giống nhau — nay normalize chạy thuần Dart (`AIPNormalizer`), byte-identical với native; không round-trip xuống native nữa |
 | KillApp delay | 3.5s | 3s | Document; không cần can thiệp |
 
 **Quy ước nhất quán:** flag/field **không hỗ trợ trên một nền tảng KHÔNG throw**, chỉ silently ignore — vì developer Flutter sẽ viết code chung cho cả 2 OS.

@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
+import '../../internal/aip/aip_normalizer.dart';
 import 'c_shield_aip.dart';
 
 /// An [http.BaseClient] that automatically signs every outgoing request
@@ -33,8 +34,7 @@ class CShieldInterceptor extends http.BaseClient {
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
     final path = request.url.path;
-    final body = _bodyOf(request);
-    final contentType = _contentTypeOf(request);
+    final (body, contentType) = _bodyAndContentType(request);
 
     // 1. Sign request — attach cs-timestamp + cs-signature headers.
     final aipHeaders = await CShieldAIP.signRequest(method: request.method, path: path, body: body, contentType: contentType);
@@ -67,9 +67,19 @@ class CShieldInterceptor extends http.BaseClient {
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
-  static Uint8List _bodyOf(http.BaseRequest request) {
-    if (request is http.Request) return request.bodyBytes;
-    return Uint8List(0);
+  /// Returns the bytes to sign and the content type to report to the normalizer.
+  static (Uint8List, String) _bodyAndContentType(http.BaseRequest request) {
+    if (request is http.MultipartRequest) {
+      // Mirror native: only text fields are signed (files skipped), sorted and
+      // JSON-encoded. Report application/json so the payload hash matches the
+      // multipart text fields the server extracts. The original multipart
+      // request (with files) is still sent on the wire unchanged.
+      return (AIPNormalizer.normalizeFields(request.fields), 'application/json');
+    }
+    if (request is http.Request) {
+      return (request.bodyBytes, _contentTypeOf(request));
+    }
+    return (Uint8List(0), _contentTypeOf(request));
   }
 
   static String _contentTypeOf(http.BaseRequest request) {
