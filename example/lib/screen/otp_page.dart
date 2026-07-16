@@ -43,13 +43,13 @@ class _OtpPageState extends State<OtpPage> {
       setState(() {
         _success = data['code'] == 'OK';
         _result = '${data['message']}';
-        
+        print(_result);
       });
     } on CShieldException catch (e) {
       setState(() {
         _success = false;
         _result = '[${e.code.name}] ${e.message}';
-        
+        print(_result);
       });
     } on DioException catch (e) {
       setState(() {
@@ -57,17 +57,17 @@ class _OtpPageState extends State<OtpPage> {
         final inner = e.error;
         if (inner is CShieldException) {
           _result = '[${inner.code.name}] ${inner.message}';
-          
+          print(_result);
         } else {
           _result = e.message ?? e.toString();
-         
+          print(_result);
         }
       });
     } catch (e) {
       setState(() {
         _success = false;
         _result = e.toString();
-      
+        print(_result);
       });
     } finally {
       setState(() => _loading = false);

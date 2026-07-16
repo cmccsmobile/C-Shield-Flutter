@@ -6,8 +6,8 @@ import 'package:crypto/crypto.dart' as crypto;
 import 'package:dio/dio.dart';
 import 'package:http/io_client.dart';
 
-import '../../api/exceptions/c_shield_exception.dart';
 import '../../internal/platform/c_shield_sdk_platform_interface.dart';
+import 'c_shield_native_adapter.dart';
 
 /// Public API for Certificate Pinning.
 ///
@@ -141,16 +141,19 @@ class CShieldSSL {
 
   // ── createDioAdapter ───────────────────────────────────────────────────
 
-  /// Returns a Dio [HttpClientAdapter] that enforces SPKI certificate pinning
-  /// for **every** connection — including CA-signed certs — by checking the
-  /// peer certificate after the TLS handshake completes.
+  /// Returns a Dio [HttpClientAdapter] that performs requests to the configured
+  /// [hostname] on the **native** side (OkHttp on Android, URLSession on iOS),
+  /// where certificate pinning is enforced against the **full certificate chain**.
   ///
-  /// This is the recommended adapter for Dio users because it closes the gap
-  /// that [createHttpClient] has: `badCertificateCallback` only fires for
-  /// invalid/untrusted certificates, so a CA-signed cert (e.g. Let's Encrypt)
-  /// would pass through without a pin check. Here, `HttpClientResponse.certificate`
-  /// is inspected post-handshake, matching Android (`CShieldTrustManager`) and
-  /// iOS (`URLSession` delegate) behaviour.
+  /// This is the recommended adapter for Dio users and the only path that
+  /// matches the standalone Android/iOS SDKs exactly: because the native layer
+  /// sees the whole chain (not just the leaf, which is all `dart:io` exposes),
+  /// it can match a pin at the leaf, intermediate, or root. Pinning a stable
+  /// intermediate CA lets the app survive leaf-certificate rotation without an
+  /// app update.
+  ///
+  /// Requests to other hosts are transparently delegated to a standard
+  /// [IOHttpClientAdapter], so unpinned traffic is unaffected.
   ///
   /// ```dart
   /// import 'package:c_shield_sdk/c_shield_sdk.dart';
@@ -163,18 +166,18 @@ class CShieldSSL {
   /// dio.interceptors.add(const CShieldDioInterceptor());
   /// ```
   ///
-  /// For the `http` package, use [createIOClient] instead.
+  /// Buffered (non-streaming); see [CShieldNativeHttpAdapter] for limitations.
+  /// For the `http` package, use [createIOClient] instead (leaf-only pinning).
   ///
   /// Throws [StateError] if [configure] has not been called.
   static HttpClientAdapter createDioAdapter() {
-    final pins = _pins;
     final hostname = _hostname;
-    if (pins == null || hostname == null) {
+    if (_pins == null || hostname == null) {
       throw StateError(
         'CShieldSSL has not been configured. Call CShieldSSL.configure() first.',
       );
     }
-    return _CShieldDioAdapter(pins: pins, hostname: hostname);
+    return CShieldNativeHttpAdapter(hostname: hostname);
   }
 
   // ── verifyPin ──────────────────────────────────────────────────────────
@@ -277,105 +280,5 @@ class CShieldSSL {
     i++; // tag
     final (contentOffset, length) = _readLength(data, i);
     return contentOffset + length;
-  }
-}
-
-// ── _CShieldDioAdapter ─────────────────────────────────────────────────────
-
-/// Dio [HttpClientAdapter] that verifies the SPKI pin of the peer certificate
-/// **after** every successful TLS handshake via [HttpClientResponse.certificate].
-///
-/// This covers CA-signed certificates, which [HttpClient.badCertificateCallback]
-/// cannot intercept (because the callback only fires for invalid/untrusted certs).
-/// The behaviour mirrors Android's [CShieldTrustManager] and iOS's URLSession
-/// delegate, both of which run on every connection regardless of CA trust status.
-class _CShieldDioAdapter implements HttpClientAdapter {
-  _CShieldDioAdapter({required List<String> pins, required String hostname})
-      : _pins = pins,
-        _hostname = hostname;
-
-  final List<String> _pins;
-  final String _hostname;
-  HttpClient? _httpClient;
-
-  @override
-  Future<ResponseBody> fetch(
-    RequestOptions options,
-    Stream<Uint8List>? requestStream,
-    Future? cancelFuture,
-  ) async {
-    final client = _getOrCreateClient();
-    HttpClientRequest? req;
-    try {
-      req = await client.openUrl(options.method, options.uri);
-      req.followRedirects = options.followRedirects;
-      req.maxRedirects = options.maxRedirects;
-
-      options.headers.forEach((key, value) {
-        if (value != null) req!.headers.set(key, '$value');
-      });
-
-      // Abort the request if Dio cancels it (e.g. via CancelToken).
-      cancelFuture?.then(
-        (_) => req?.abort(),
-        onError: (_) => req?.abort(),
-      );
-
-      if (requestStream != null) {
-        await req.addStream(requestStream);
-      }
-
-      final response = await req.close();
-
-      // ── Post-handshake SPKI pin verification ─────────────────────────────
-      // HttpClientResponse.certificate is the server leaf cert, available for
-      // all HTTPS connections after a successful handshake — CA-signed or not.
-      if (options.uri.isScheme('https') && options.uri.host == _hostname) {
-        final cert = response.certificate;
-        if (cert != null) {
-          final computed = CShieldSSL._computeSpkiPin(cert.der);
-          if (computed == null || !_pins.contains(computed)) {
-            req.abort();
-            throw CShieldException(
-              CShieldErrorCode.sslPinMismatch,
-              'Certificate SPKI pin mismatch for host: $_hostname',
-            );
-          }
-        }
-      }
-
-      final headers = <String, List<String>>{};
-      response.headers.forEach((key, values) => headers[key] = values);
-
-      return ResponseBody(
-        response.map(Uint8List.fromList),
-        response.statusCode,
-        headers: headers,
-        isRedirect: response.isRedirect,
-        statusMessage: response.reasonPhrase,
-      );
-    } on CShieldException {
-      rethrow;
-    } catch (e) {
-      req?.abort();
-      rethrow;
-    }
-  }
-
-  HttpClient _getOrCreateClient() {
-    return _httpClient ??= HttpClient()
-      // badCertificateCallback handles self-signed / unknown-CA certs:
-      // allows them through only if the SPKI pin matches.
-      ..badCertificateCallback = (X509Certificate cert, String host, int port) {
-        if (host != _hostname) return false;
-        final computed = CShieldSSL._computeSpkiPin(cert.der);
-        return computed != null && _pins.contains(computed);
-      };
-  }
-
-  @override
-  void close({bool force = false}) {
-    _httpClient?.close(force: force);
-    _httpClient = null;
   }
 }

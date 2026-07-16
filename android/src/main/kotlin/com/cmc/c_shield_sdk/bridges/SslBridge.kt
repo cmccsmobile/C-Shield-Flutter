@@ -1,5 +1,7 @@
 package com.cmc.c_shield_sdk.bridges
 
+import android.os.Handler
+import android.os.Looper
 import android.util.Base64
 import com.cmc.c_shield_sdk.CShieldErrorCode
 import com.example.c_shield_sdk.aip.pinning.CShieldSSL
@@ -9,8 +11,19 @@ import java.io.ByteArrayInputStream
 import java.security.cert.CertificateException
 import java.security.cert.CertificateFactory
 import java.security.cert.X509Certificate
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
 
 class SslBridge {
+
+    // Network I/O must not run on the platform (main) thread; results are posted
+    // back to the main thread because MethodChannel.Result must be invoked there.
+    private val executor = Executors.newCachedThreadPool()
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     fun handle(call: MethodCall, result: Result) {
         when (call.method) {
@@ -18,6 +31,7 @@ class SslBridge {
             "ssl.updatePins"         -> handleUpdatePins(call, result)
             "ssl.isConfigured"       -> result.success(CShieldSSL.isConfigured())
             "ssl.checkServerTrusted" -> handleCheckServerTrusted(call, result)
+            "ssl.httpRequest"        -> handleHttpRequest(call, result)
             else -> result.notImplemented()
         }
     }
@@ -81,4 +95,75 @@ class SslBridge {
             result.error(CShieldErrorCode.NATIVE_ERROR, e.message, null)
         }
     }
+
+    /**
+     * Performs an HTTPS request through OkHttp configured with
+     * [CShieldSSL.getSSLSocketFactory] + [CShieldSSL.getTrustManager], so
+     * certificate pinning runs at the TLS layer over the FULL chain.
+     *
+     * Flutter's Dart adapter (CShieldNativeHttpAdapter) delegates the pinned
+     * host's requests here; this is what lets Flutter match intermediate/root
+     * pins that pure-Dart networking cannot.
+     */
+    private fun handleHttpRequest(call: MethodCall, result: Result) {
+        val method = (call.argument<String>("method") ?: "GET").uppercase()
+        val url = call.argument<String>("url")
+            ?: return result.error(CShieldErrorCode.INVALID_ARGUMENT, "url required", null)
+        val headers = call.argument<Map<String, String>>("headers") ?: emptyMap()
+        val body = call.argument<ByteArray>("body")
+        val connectTimeoutMs = call.argument<Int>("connectTimeoutMs")
+        val receiveTimeoutMs = call.argument<Int>("receiveTimeoutMs")
+        val followRedirects = call.argument<Boolean>("followRedirects") ?: true
+
+        if (!CShieldSSL.isConfigured()) {
+            return result.error(CShieldErrorCode.SSL_NOT_CONFIGURED, "CShieldSSL not configured", null)
+        }
+
+        executor.execute {
+            try {
+                val builder = OkHttpClient.Builder()
+                    .sslSocketFactory(CShieldSSL.getSSLSocketFactory(), CShieldSSL.getTrustManager())
+                    .followRedirects(followRedirects)
+                    .followSslRedirects(followRedirects)
+                connectTimeoutMs?.let { if (it > 0) builder.connectTimeout(it.toLong(), TimeUnit.MILLISECONDS) }
+                receiveTimeoutMs?.let { if (it > 0) builder.readTimeout(it.toLong(), TimeUnit.MILLISECONDS) }
+                val client = builder.build()
+
+                // OkHttp requires a body for POST/PUT/PATCH etc. and forbids one
+                // for GET/HEAD. Content-Type is carried via the headers map below.
+                val requestBody: RequestBody? = when {
+                    body != null -> body.toRequestBody(null)
+                    requiresRequestBody(method) -> ByteArray(0).toRequestBody(null)
+                    else -> null
+                }
+
+                val reqBuilder = Request.Builder().url(url).method(method, requestBody)
+                headers.forEach { (k, v) -> reqBuilder.header(k, v) }
+
+                client.newCall(reqBuilder.build()).execute().use { response ->
+                    val bodyBytes = response.body?.bytes() ?: ByteArray(0)
+                    val headerMap = HashMap<String, List<String>>()
+                    response.headers.names().forEach { name ->
+                        headerMap[name] = response.headers.values(name)
+                    }
+                    val payload = hashMapOf<String, Any?>(
+                        "statusCode" to response.code,
+                        "reasonPhrase" to response.message,
+                        "headers" to headerMap,
+                        "body" to bodyBytes,
+                    )
+                    mainHandler.post { result.success(payload) }
+                }
+            } catch (e: javax.net.ssl.SSLPeerUnverifiedException) {
+                mainHandler.post {
+                    result.error(CShieldErrorCode.SSL_PIN_MISMATCH, e.message ?: "Certificate pin mismatch", null)
+                }
+            } catch (e: Exception) {
+                mainHandler.post { result.error(CShieldErrorCode.NATIVE_ERROR, e.message, null) }
+            }
+        }
+    }
+
+    private fun requiresRequestBody(method: String): Boolean =
+        method in setOf("POST", "PUT", "PATCH", "PROPPATCH", "REPORT")
 }

@@ -9,6 +9,7 @@ export 'src/api/rasp/rasp_extended_result.dart';
 export 'src/api/rasp/rasp_result.dart';
 export 'src/api/rasp/threat_action.dart';
 export 'src/api/ssl/c_shield_ssl.dart';
+export 'src/api/ssl/c_shield_native_adapter.dart';
 export 'src/api/aip/c_shield_aip.dart';
 export 'src/api/aip/c_shield_interceptor.dart';
 export 'src/api/aip/c_shield_dio_interceptor.dart';

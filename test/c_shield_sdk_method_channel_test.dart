@@ -15,8 +15,7 @@ void main() {
   setUp(() {
     platform = MethodChannelCShieldSdk();
     calls.clear();
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(channel, (call) async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
       calls.add(call);
       return switch (call.method) {
         'sdk.initialize' => null,
@@ -35,8 +34,7 @@ void main() {
   });
 
   tearDown(() {
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(channel, null);
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(channel, null);
   });
 
   test('initialize sends sdk.initialize', () async {
@@ -45,14 +43,7 @@ void main() {
   });
 
   test('raspBuild sends correct flags and returns checkerId', () async {
-    final id = await platform.raspBuild(flags: {
-      'checkDebugger': true,
-      'rootDetector': false,
-      'tampering': true,
-      'emulator': true,
-      'deviceSecurityState': true,
-      'userCA': false,
-    });
+    final id = await platform.raspBuild(flags: {'checkDebugger': true, 'rootDetector': false, 'tampering': true, 'emulator': true, 'deviceSecurityState': true, 'userCA': false});
     expect(id, 'checker-abc');
     final call = calls.single;
     expect(call.method, 'rasp.build');
@@ -68,12 +59,7 @@ void main() {
   });
 
   test('raspSubscribe sends all required args', () async {
-    await platform.raspSubscribe(
-      checkerId: 'checker-abc',
-      subscriptionId: 'sub-uuid',
-      detail: true,
-      automaticallyShowPopup: false,
-    );
+    await platform.raspSubscribe(checkerId: 'checker-abc', subscriptionId: 'sub-uuid', detail: true, automaticallyShowPopup: false);
     final call = calls.single;
     expect(call.method, 'rasp.subscribe');
     final args = call.arguments as Map;
@@ -88,10 +74,7 @@ void main() {
       checkerId: 'checker-abc',
       config: {
         'trustedStores': ['com.android.vending'],
-        'threatActionConfig': {
-          'rootDetectedAction': 'KillApp',
-          'debuggerDetectedAction': 'NotifyApp',
-        },
+        'threatActionConfig': {'rootDetectedAction': 'KillApp', 'debuggerDetectedAction': 'NotifyApp'},
       },
     );
     final call = calls.single;

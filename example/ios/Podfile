@@ -51,13 +51,15 @@ post_install do |installer|
     target.build_configurations.each do |config|
       variant = (config.name == 'Debug') ? 'Debug' : 'Release'
 
-      existing = Array(config.build_settings['FRAMEWORK_SEARCH_PATHS']).flatten
-      existing = ['$(inherited)'] if existing.empty?
+      config.build_settings['FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]'] = (
+        ['$(inherited)'] + Array(config.build_settings['FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]']).flatten +
+        ["\"$(PODS_ROOT)/../Libs/#{variant}/CShieldSDK.xcframework/ios-arm64\""]
+      ).uniq
 
-      config.build_settings['FRAMEWORK_SEARCH_PATHS'] = (existing + [
-        "\"$(PODS_ROOT)/../Libs/#{variant}/CShieldSDK.xcframework/ios-arm64\"",
-        "\"$(PODS_ROOT)/../Libs/#{variant}/CShieldSDK.xcframework/ios-arm64_x86_64-simulator\"",
-      ]).uniq
+      config.build_settings['FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*]'] = (
+        ['$(inherited)'] + Array(config.build_settings['FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*]']).flatten +
+        ["\"$(PODS_ROOT)/../Libs/#{variant}/CShieldSDK.xcframework/ios-arm64_x86_64-simulator\""]
+      ).uniq
     end
   end
 
@@ -67,13 +69,15 @@ post_install do |installer|
     aggregate_target.xcconfigs.each do |config_name, xcconfig|
       variant = (config_name == 'Debug') ? 'Debug' : 'Release'
 
-      paths = [
-        "\"$(PODS_ROOT)/../Libs/#{variant}/CShieldSDK.xcframework/ios-arm64\"",
-        "\"$(PODS_ROOT)/../Libs/#{variant}/CShieldSDK.xcframework/ios-arm64_x86_64-simulator\"",
-      ]
+      path_os = "\"$(PODS_ROOT)/../Libs/#{variant}/CShieldSDK.xcframework/ios-arm64\""
+      path_sim = "\"$(PODS_ROOT)/../Libs/#{variant}/CShieldSDK.xcframework/ios-arm64_x86_64-simulator\""
 
-      existing = xcconfig.attributes['FRAMEWORK_SEARCH_PATHS'] || '$(inherited)'
-      xcconfig.attributes['FRAMEWORK_SEARCH_PATHS'] = ([existing] + paths).uniq.join(' ')
+      existing_os = xcconfig.attributes['FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]'] || '$(inherited)'
+      existing_sim = xcconfig.attributes['FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*]'] || '$(inherited)'
+
+      xcconfig.attributes['FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]'] = ([existing_os, path_os]).uniq.join(' ')
+      xcconfig.attributes['FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*]'] = ([existing_sim, path_sim]).uniq.join(' ')
+      
       xcconfig.save_as(aggregate_target.xcconfig_path(config_name))
     end
   end

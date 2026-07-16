@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/services.dart';
 import '../channels.dart';
 import '../codec/error_codec.dart';
@@ -105,6 +107,26 @@ class MethodChannelCShieldSdk extends CShieldSdkPlatform {
   }) => _invoke<bool>(CShieldChannels.sslCheckServerTrusted, {
         'certDer': certDerBase64,
         'host': host,
+      });
+
+  @override
+  Future<Map<Object?, Object?>> sslHttpRequest({
+    required String method,
+    required String url,
+    required Map<String, String> headers,
+    Uint8List? body,
+    int? connectTimeoutMs,
+    int? receiveTimeoutMs,
+    bool followRedirects = true,
+  }) =>
+      _invoke<Map<Object?, Object?>>(CShieldChannels.sslHttpRequest, {
+        'method': method,
+        'url': url,
+        'headers': headers,
+        'body': body,
+        'connectTimeoutMs': connectTimeoutMs,
+        'receiveTimeoutMs': receiveTimeoutMs,
+        'followRedirects': followRedirects,
       });
 
   // ── AIP ──────────────────────────────────────────────────────────────────

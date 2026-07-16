@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'c_shield_sdk_method_channel.dart';
 
@@ -62,6 +64,21 @@ abstract class CShieldSdkPlatform extends PlatformInterface {
   Future<bool> sslCheckServerTrusted({
     required String certDerBase64,
     required String host,
+  }) => throw UnimplementedError();
+
+  /// Executes an HTTPS request on the native side (OkHttp / URLSession) with
+  /// certificate pinning enforced over the full chain.
+  ///
+  /// Returns a map: `{ 'statusCode': int, 'headers': Map<String, List<String>>,
+  /// 'body': Uint8List, 'reasonPhrase': String? }`.
+  Future<Map<Object?, Object?>> sslHttpRequest({
+    required String method,
+    required String url,
+    required Map<String, String> headers,
+    Uint8List? body,
+    int? connectTimeoutMs,
+    int? receiveTimeoutMs,
+    bool followRedirects = true,
   }) => throw UnimplementedError();
 
   // ── AIP ──────────────────────────────────────────────────────────────────

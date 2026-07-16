@@ -22,10 +22,7 @@ class _MockPlatform with MockPlatformInterfaceMixin implements CShieldSdkPlatfor
   }
 
   @override
-  Future<void> raspSetConfig({
-    required String checkerId,
-    required Map<String, dynamic> config,
-  }) async => _calls.add('raspSetConfig');
+  Future<void> raspSetConfig({required String checkerId, required Map<String, dynamic> config}) async => _calls.add('raspSetConfig');
 
   @override
   Future<String> raspQuickCheck({required String checkerId}) async {
@@ -34,20 +31,13 @@ class _MockPlatform with MockPlatformInterfaceMixin implements CShieldSdkPlatfor
   }
 
   @override
-  Future<void> raspSubscribe({
-    required String checkerId,
-    required String subscriptionId,
-    required bool detail,
-    required bool automaticallyShowPopup,
-  }) async => _calls.add('raspSubscribe');
+  Future<void> raspSubscribe({required String checkerId, required String subscriptionId, required bool detail, required bool automaticallyShowPopup}) async => _calls.add('raspSubscribe');
 
   @override
-  Future<void> raspCancelSubscribe({required String subscriptionId}) async =>
-      _calls.add('raspCancelSubscribe');
+  Future<void> raspCancelSubscribe({required String subscriptionId}) async => _calls.add('raspCancelSubscribe');
 
   @override
-  Future<void> raspDispose({required String checkerId}) async =>
-      _calls.add('raspDispose');
+  Future<void> raspDispose({required String checkerId}) async => _calls.add('raspDispose');
 
   @override
   Future<void> sslConfigure({required List<String> pins, required String hostname}) async {}
@@ -59,47 +49,50 @@ class _MockPlatform with MockPlatformInterfaceMixin implements CShieldSdkPlatfor
   Future<bool> sslIsConfigured() async => false;
 
   @override
-  Future<Map<String, String>> aipSignRequest({
-    required String method,
-    required String path,
-    required Map<String, String> headers,
-    required Uint8List body,
-    required String contentType,
-  }) async => {};
+  Future<Map<String, String>> aipSignRequest({required String method, required String path, required Map<String, String> headers, required Uint8List body, required String contentType}) async => {};
 
   @override
-  Future<void> aipVerifyResponse({
-    required int statusCode,
-    required String path,
-    required Map<String, String> headers,
-    required Uint8List body,
-  }) async {}
+  Future<void> aipVerifyResponse({required int statusCode, required String path, required Map<String, String> headers, required Uint8List body}) async {}
 
   @override
-  Future<Map<String, dynamic>> aipNormalizeBody({
-    required String contentType,
-    required Uint8List body,
-    List<Map<String, String>>? multipartFields,
-  }) async => {};
-  
+  Future<Map<String, dynamic>> aipNormalizeBody({required String contentType, required Uint8List body, List<Map<String, String>>? multipartFields}) async => {};
+
   @override
   Future<String> aipSign({required String payload}) {
     // TODO: implement aipSign
     throw UnimplementedError();
   }
-  
+
   @override
   Future<void> aipVerify({required String payload, required String signature}) {
     // TODO: implement aipVerify
     throw UnimplementedError();
   }
-  
+
   @override
   Future<bool> sslCheckServerTrusted({required String certDerBase64, required String host}) {
     // TODO: implement sslCheckServerTrusted
     throw UnimplementedError();
   }
-  
+
+  @override
+  Stream<LoadAppThreatEvent> threatEvents() {
+    // TODO: implement threatEvents
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<Map<Object?, Object?>> sslHttpRequest({
+    required String method,
+    required String url,
+    required Map<String, String> headers,
+    Uint8List? body,
+    int? connectTimeoutMs,
+    int? receiveTimeoutMs,
+    bool followRedirects = true,
+  }) {
+    throw UnimplementedError();
+  }
 }
 
 void main() {
@@ -153,23 +146,12 @@ void main() {
       final checker = RASPChecker.builder();
       await checker.quickCheck();
       await checker.dispose();
-      expect(
-        () => checker.quickCheck(),
-        throwsA(isA<CShieldException>().having(
-          (e) => e.code,
-          'code',
-          CShieldErrorCode.raspCheckerDisposed,
-        )),
-      );
+      expect(() => checker.quickCheck(), throwsA(isA<CShieldException>().having((e) => e.code, 'code', CShieldErrorCode.raspCheckerDisposed)));
     });
 
     test('setRASPConfig calls platform setConfig', () async {
       final checker = RASPChecker.builder();
-      await checker.setRASPConfig(const RASPConfig(
-        threatActionConfig: ThreatActionConfig(
-          rootDetectedAction: ThreatDetectedAction.killApp,
-        ),
-      ));
+      await checker.setRASPConfig(const RASPConfig(threatActionConfig: ThreatActionConfig(rootDetectedAction: ThreatDetectedAction.killApp)));
       expect(mock.calls, containsAllInOrder(['raspBuild', 'raspSetConfig']));
     });
 

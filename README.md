@@ -35,6 +35,7 @@ SDK bọc native AAR (Android) và XCFramework (iOS), đảm bảo khả năng p
    - 6.3 [Tích hợp với http package](#63-tích-hợp-với-http-package)
    - 6.4 [Tích hợp với Dio](#64-tích-hợp-với-dio)
    - 6.5 [Xác minh thủ công](#65-xác-minh-thủ-công)
+   - 6.6 [Khả năng, hạn chế và khuyến nghị](#66-khả-năng-hạn-chế-và-khuyến-nghị)
 7. [Exceptions](#7-exceptions)
 
 ---
@@ -117,7 +118,7 @@ flutter build appbundle --release
 
 ### 1.3 Cấu hình iOS
 
-Vui lòng đọc và làm theo các bước tại [iOS Integration Guide](https://github.com/cmccsmobile/C-Shield-Flutter/blob/main/doc/ios-host-app-integration.md).
+Vui lòng đọc và làm theo các bước tại [iOS Integration Guide](docs/ios-host-app-integration.md).
 
 ---
 
@@ -618,6 +619,22 @@ openssl s_client -connect api.example.com:443 -servername api.example.com 2>/dev
 
 **Khuyến nghị: luôn cung cấp tối thiểu 2 pin** (primary + backup) để tránh lockout khi rotate certificate.
 
+#### Pin intermediate CA để sống sót qua rotation
+
+Certificate leaf thường được **cấp lại định kỳ** (Let's Encrypt/Google Trust Services ~90 ngày) và **có thể đổi key mỗi lần** → pin leaf sẽ lệch và **app bị chặn kết nối** cho tới khi ra bản update. Để tránh, hãy pin **public key của một intermediate CA ổn định** (ít đổi trong nhiều năm) thay vì/bên cạnh leaf. `createDioAdapter()` khớp pin trên **toàn bộ chain**, nên chỉ cần một cert bất kỳ trong chain khớp là hợp lệ.
+
+```bash
+# Xem toàn bộ chain (leaf + intermediate + root)
+openssl s_client -connect api.example.com:443 -servername api.example.com -showcerts </dev/null 2>/dev/null
+
+# Với mỗi block "BEGIN CERTIFICATE" (cert #1 = intermediate), tính SPKI pin:
+openssl x509 -in intermediate.pem -pubkey -noout \
+  | openssl pkey -pubin -outform DER \
+  | openssl dgst -sha256 -binary | openssl base64
+```
+
+> ⚠️ **Chỉ đường Dio (`createDioAdapter`) mới khớp cả chain.** Đường `http` và `verifyPin` chỉ so leaf (xem [6.6](#66-khả-năng-hạn-chế-và-khuyến-nghị)) — pin intermediate sẽ **không** khớp ở hai đường đó.
+
 ### 6.2 Cấu hình CShieldSSL
 
 Gọi `configure()` sau `initialize()`, trước khi thực hiện bất kỳ network request nào:
@@ -639,12 +656,14 @@ await CShieldSSL.configure(
 | `configure(pins, hostname)` | Cấu hình pinning; throw `ArgumentError` nếu pin rỗng, hostname trống, hoặc pin không có prefix `sha256/` |
 | `updatePins(pins, hostname)` | Cập nhật pin mới sau khi server rotate certificate (alias của `configure`) |
 | `isConfigured()` | Trả về `true` nếu đã cấu hình |
-| `createDioAdapter()` | **(Khuyến nghị)** Tạo `HttpClientAdapter` cho Dio với SPKI pinning post-handshake — verify pin cho cả CA-signed cert |
-| `createHttpClient()` | Tạo `HttpClient` (dart:io) với SPKI pinning qua `badCertificateCallback` |
-| `createIOClient()` | Tạo `IOClient` (http package) — drop-in cho `http.Client()` |
-| `verifyPin(certDerBase64, host)` | Xác minh thủ công một certificate DER base64; trả về `true/false` |
+| `createDioAdapter()` | **(Khuyến nghị)** Tạo `HttpClientAdapter` cho Dio. Request tới `hostname` được thực hiện ở **native** (OkHttp/URLSession) → pinning chạy ở tầng TLS với **full chain** (khớp leaf/intermediate/root). Host khác đi qua adapter mặc định. |
+| `createHttpClient()` | Tạo `HttpClient` (dart:io) với SPKI pinning qua `badCertificateCallback`. **Leaf-only, thuần Dart** — xem cảnh báo [6.6](#66-khả-năng-hạn-chế-và-khuyến-nghị) |
+| `createIOClient()` | Tạo `IOClient` (http package) — drop-in cho `http.Client()`. **Leaf-only, thuần Dart** |
+| `verifyPin(certDerBase64, host)` | Xác minh thủ công một certificate DER base64. **Chỉ kiểm SPKI của leaf** (Dart chỉ truyền được leaf) |
 
 ### 6.3 Tích hợp với http package
+
+> ⚠️ **Không khuyến nghị cho API nhạy cảm.** Đường `http` dùng `badCertificateCallback` — callback này **chỉ kích hoạt khi cert FAIL validation mặc định**. Một cert MITM chain hợp lệ tới CA được tin (kể cả CA do nạn nhân tự cài) sẽ **pass mà không bị kiểm pin**. Ngoài ra nó **chỉ so leaf**, không pin được intermediate. Với dữ liệu nhạy cảm hãy dùng **Dio + `createDioAdapter()`** ([6.4](#64-tích-hợp-với-dio)).
 
 ```dart
 import 'package:c_shield_sdk/c_shield_sdk.dart';
@@ -686,17 +705,22 @@ await CShieldSSL.configure(
 
 final dio = Dio(BaseOptions(baseUrl: 'https://api.example.com'));
 
-// Gắn SSL pinning vào Dio — createDioAdapter() kiểm tra SPKI pin
-// post-handshake qua HttpClientResponse.certificate, bao gồm cả
-// CA-signed cert (Let's Encrypt...). Khác với badCertificateCallback
-// chỉ fire khi cert không được hệ thống tin cậy.
+// Gắn SSL pinning vào Dio. Với host đã configure, request được thực hiện
+// ở NATIVE (OkHttp trên Android, URLSession trên iOS) — nơi thấy full
+// certificate chain — nên pinning khớp được cả intermediate/root, đồng bộ
+// với Android/iOS SDK gốc và chạy dưới bảo vệ RASP. Host khác đi qua
+// adapter mặc định (không ảnh hưởng).
 dio.httpClientAdapter = CShieldSSL.createDioAdapter();
 
 // Kết hợp với AIP
 dio.interceptors.add(const CShieldDioInterceptor());
 ```
 
+> **Buffered (không streaming).** Request/response được truyền trọn gói qua native. Không hỗ trợ upload/download progress, `ResponseType.stream`, hay SSE trên host được pin — xem [6.6](#66-khả-năng-hạn-chế-và-khuyến-nghị).
+
 ### 6.5 Xác minh thủ công
+
+> ⚠️ `verifyPin()` **chỉ kiểm SPKI của leaf certificate** (Dart chỉ truyền được leaf xuống native) và không thực hiện CA chain validation đầy đủ. Coi đây là tiện ích phụ, không phải cơ chế pinning chính. Cơ chế đầy đủ (full chain + CA validation) là `createDioAdapter()`.
 
 Dùng `verifyPin()` trong interceptor tuỳ chỉnh hoặc WebSocket:
 
@@ -716,6 +740,54 @@ if (!trusted) {
   );
 }
 ```
+
+### 6.6 Khả năng, hạn chế và khuyến nghị
+
+Ràng buộc gốc của Flutter: `dart:io` **chỉ expose leaf certificate**, không có API thuần Dart nào lấy được full chain. Vì vậy SDK **uỷ quyền transport cho native** (OkHttp/URLSession) ở đường Dio để pinning chạy đúng nơi có full chain — đây là mô hình được xem là chuẩn nhất cho Flutter.
+
+#### Đang làm được gì
+
+| Năng lực | `createDioAdapter` (Dio) | `createIOClient` (http) | `verifyPin` |
+|---|---|---|---|
+| Khớp SPKI **full chain** (leaf/intermediate/root) | ✅ | ❌ chỉ leaf | ❌ chỉ leaf |
+| Pin intermediate → chống rotation | ✅ | ❌ | ❌ |
+| System CA validation (fail-closed) | ✅ (native) | một phần¹ | một phần |
+| Chặn user-installed CA (Burp/Charles) | ✅ (native) | ❌² | — |
+| Chạy dưới RASP (chống Frida/Xposed hook)³ | ✅ | ❌ (ở Dart) | ✅ |
+
+¹ `badCertificateCallback` chỉ chạy khi validation mặc định thất bại.
+² MITM có cert chain hợp lệ tới CA được tin sẽ lọt (callback không kích hoạt).
+³ Chỉ có hiệu lực khi **RASP được bật và threat action đặt chặn/thoát app** (xem [mục 4](#4-rasp--runtime-application-self-protection)). RASP bảo vệ **logic kiểm tra pin** (nằm trong native SDK), không phải giá trị pin do app truyền vào.
+
+#### Hạn chế khi sử dụng
+
+**A. Bẩm sinh của Flutter — không cách nào trong SDK thoát được:**
+- **Phạm vi phủ hẹp**: chỉ traffic đi qua đúng Dio instance có adapter, và chỉ tới `hostname` đã config. **KHÔNG** pin: WebView (`webview_flutter`), tải ảnh (`Image.network`, `CachedNetworkImage`), thư viện HTTP khác, plugin bên thứ ba. → Dồn API nhạy cảm về Dio instance đã gắn adapter.
+- **Web build**: trình duyệt không cho app-level pinning.
+- **Quản lý rotation/expiry**: cert hết hạn còn pin → app chết. Giảm nhẹ bằng pin **intermediate** ([6.1](#pin-intermediate-ca-để-sống-sót-qua-rotation)) + backup pin.
+
+**B. Do cách hiện thực (đường Dio native transport):**
+- **Buffered, không streaming**: no upload/download progress, no `ResponseType.stream`, no SSE. File lớn dễ tốn RAM → dùng Dio instance không-pin cho các ca này.
+- **`CancelToken` chưa huỷ được request native**: Dio huỷ ở phía Dart nhưng request native vẫn chạy tới khi xong.
+- **iOS gộp header đa giá trị**: `HTTPURLResponse` gộp nhiều header cùng tên (đặc biệt `Set-Cookie`) thành một chuỗi → interceptor cookie có thể parse sai. Android trả đúng list.
+- **iOS `followRedirects=false` là best-effort**: URLSession mặc định vẫn follow redirect.
+- **Fidelity khác**: cookie jar, HTTP/2, nén, proxy… theo client native chứ không theo Dio; `sendTimeout` không map.
+
+**C. Đường `http` package và `verifyPin`**: leaf-only, không đảm bảo an toàn — **không dùng cho dữ liệu nhạy cảm** (xem cảnh báo [6.3](#63-tích-hợp-với-http-package), [6.5](#65-xác-minh-thủ-công)).
+
+#### Cần cải thiện (roadmap)
+
+- [ ] Nối `CancelToken` → huỷ request native (`Call.cancel()` / `URLSessionTask.cancel()`).
+- [ ] Sửa gộp header đa giá trị trên iOS (đặc biệt `Set-Cookie`).
+- [ ] Honor `followRedirects=false` trên iOS (task-level delegate).
+- [ ] (Lớn) Streaming bridge cho upload/download lớn và SSE.
+- [ ] Cân nhắc đưa pin vào native build-time / remote-config có chữ ký để giảm bề mặt tráo pin.
+
+#### Khuyến nghị nhanh
+
+- Dữ liệu nhạy cảm → **Dio + `createDioAdapter()`**, pin **intermediate + backup**.
+- **Bật RASP** và đặt threat action chặn/thoát để lời hứa chống-hook có hiệu lực.
+- Không dựa vào `createIOClient`/`verifyPin` như lớp bảo mật chính.
 
 ---
 

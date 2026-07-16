@@ -3,7 +3,7 @@ import 'package:dio/dio.dart';
 
 const baseUrl = 'https://demo-spring-server.onrender.com';
 const sslHostname = 'demo-spring-server.onrender.com';
-const sslPins = ['sha256/T4eoRdbfIYF3G9IOGamqR3Vgye2bNLHQTSCOY8u3y5w='];
+const sslPins = ['sha256/kIdp6NNEd8wsugYyyIYFsi1ylMCED3hZbSR8ZFsa/A4='];
 
 Dio buildDio() {
   final dio = Dio(BaseOptions(baseUrl: baseUrl));
