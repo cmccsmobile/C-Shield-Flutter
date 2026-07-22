@@ -118,7 +118,7 @@ flutter build appbundle --release
 
 ### 1.3 Cấu hình iOS
 
-Vui lòng đọc và làm theo các bước tại [iOS Integration Guide](doc/ios-host-app-integration.md).
+Vui lòng đọc và làm theo các bước tại [iOS Integration Guide](docs/ios-host-app-integration.md).
 
 ---
 
@@ -150,44 +150,19 @@ Nếu không gọi `initialize()` trước khi dùng các API khác, SDK sẽ th
 
 ## 3. Threat phát hiện lúc load app
 
-Khi app khởi động, native SDK tự động quét một số mối đe dọa nguy hiểm nhất (Frida, root/jailbreak, hooking, tampering). Nếu phát hiện: **native hiển thị một popup cảnh báo rồi kill process**. Việc kill này **native lo hoàn toàn, Flutter không thể can thiệp** — threat xảy ra ngay lúc native load, trước khi Flutter kịp render, và process bị đóng ngay sau đó.
+Khi app khởi động, native SDK tự động quét một số mối đe dọa nguy hiểm nhất (Frida, Rooting/Jailbreaking, Hooking, tampering). Nếu phát hiện, **app sẽ bị kill ngay lập tức** mà không cần bất kỳ can thiệp nào từ phía Flutter.
 
-Từ phía Flutter, bạn chỉ điều chỉnh được **nội dung** và **có/không hiện** popup:
 
 ```dart
-await CShieldSdk.initialize(
-  // Override text của popup mặc định. Trường null → giữ string mặc định của native.
-  loadAppThreatPopup: const ThreatPopupText(
-    title: 'Phát hiện mối đe dọa',
-    description: 'Ứng dụng không thể chạy trong môi trường không an toàn và sẽ đóng lại.',
-  ),
-  // false → tắt hẳn popup (app vẫn bị kill).
-  showLoadAppThreatPopup: true,
-  // Thông báo best-effort — CHỈ để ghi log. Xem cảnh báo bên dưới.
-  onLoadAppThreat: (event) {
-    debugPrint('Load-app threat: ${event.threatType}');
-  },
-);
+await CShieldSdk.initialize();
 ```
-
-**Tham số của `initialize()` liên quan load-app threat:**
-
-| Tham số | Kiểu | Mặc định | Mô tả |
-|---|---|---|---|
-| `loadAppThreatPopup` | `ThreatPopupText?` | `null` | Override `title` / `description` của popup mặc định. Trường nào `null` thì dùng string mặc định của native (có thể chứa tên threat) |
-| `showLoadAppThreatPopup` | `bool` | `true` | `false` = không hiện popup nào (app **vẫn bị kill**) |
-| `onLoadAppThreat` | `void Function(LoadAppThreatEvent)?` | `null` | Callback thông báo khi phát hiện threat |
-
-> ⚠️ **`onLoadAppThreat` là best-effort, KHÔNG phải hook để vẽ UI.** Threat bắn ra trước khi Flutter render và process bị đóng ngay sau đó, nên không đảm bảo callback chạy xong, cũng không đảm bảo việc nó khởi động (gọi mạng, mở dialog) kịp hoàn tất. Chỉ dùng để ghi log/diagnostics cục bộ. Muốn **thay hẳn popup bằng UI của riêng bạn**, phải làm ở tầng native (custom Activity trên Android / ViewController trên iOS) — đây là đặc quyền native, không với tới từ Flutter.
-
-**`LoadAppThreatEvent.threatType` là enum `LoadAppThreatType`:**
 
 | Giá trị | Mô tả | Nền tảng |
 |---|---|---|
-| `LoadAppThreatType.frida` | Phát hiện Frida framework | Android & iOS |
-| `LoadAppThreatType.rooted` | Thiết bị bị root (Zygisk/Magisk trên Android) hoặc jailbreak (iOS) | Android & iOS |
-| `LoadAppThreatType.hookingFramework` | Phát hiện framework hooking | Android & iOS |
-| `LoadAppThreatType.tampering` | App bị can thiệp, chữ ký không hợp lệ | Android & iOS |
+| `Frida` | Phát hiện Frida framework | Android & IOS  |
+| `Rooting/Jailbreaking` | Phát hiện Zygisk module (Magisk module rooting) hoặc thiết bị jailbreak | Android & IOS |
+| `Hooking` | Phát hiện framework hooking | Android & IOS |
+| `tampering` | App bị can thiệp, chữ ký không hợp lệ | Android & iOS |
 
 ---
 
@@ -364,52 +339,6 @@ checker.subscribe(detail: true, automaticallyShowPopup: false).listen((result) {
   }
 });
 ```
-
-**Hiển thị popup tuỳ chỉnh bằng Flutter:**
-
-Khác với load-app threat, RASP chạy khi app **đang sống** (engine Flutter đã render), nên bạn **vẽ được UI Dart** ngay trong callback. Điều kiện: đặt `automaticallyShowPopup: false` để native **không** hiện popup của nó song song (nếu để `true` sẽ ra **hai** popup).
-
-Vì callback nằm ngoài cây widget (thường ở `main()`), dùng `navigatorKey` để mở dialog:
-
-```dart
-final navigatorKey = GlobalKey<NavigatorState>();
-bool _dialogVisible = false; // stream chi tiết bắn nhiều kết quả liên tiếp → giữ 1 dialog
-
-// Trong MaterialApp: navigatorKey: navigatorKey
-
-checker.subscribe(detail: true, automaticallyShowPopup: false).listen((result) {
-  if (!result.vulnerable) return;
-  _showThreatDialog(result);
-});
-
-Future<void> _showThreatDialog(RASPExtendedResult result) async {
-  final context = navigatorKey.currentContext;
-  if (context == null || _dialogVisible) return;
-
-  final isCritical = result.threatAction == ThreatDetectedAction.killApp;
-  _dialogVisible = true;
-  await showDialog<void>(
-    context: context,
-    barrierDismissible: !isCritical,
-    builder: (ctx) => AlertDialog(
-      title: Text(isCritical ? 'Phát hiện mối đe dọa' : 'Cảnh báo bảo mật'),
-      content: Text('Loại: ${result.checkType.key}'),
-      actions: [
-        FilledButton(
-          onPressed: () {
-            Navigator.of(ctx).pop();
-            if (isCritical) SystemNavigator.pop(); // tự đóng app
-          },
-          child: Text(isCritical ? 'Thoát' : 'OK'),
-        ),
-      ],
-    ),
-  );
-  _dialogVisible = false;
-}
-```
-
-> Khi `automaticallyShowPopup: false`, native giao **toàn quyền** phản ứng cho app — kể cả việc kill. Với threat `killApp`, nếu muốn đóng app bạn phải tự làm (`SystemNavigator.pop()` như trên). Muốn giữ auto-kill của native thì để `automaticallyShowPopup: true`, nhưng khi đó **đừng** vẽ popup riêng nữa kẻo trùng.
 
 ### 4.5 Bảng RASPCheckType chi tiết
 
@@ -926,10 +855,8 @@ try {
 ```
 main()
   +-- WidgetsFlutterBinding.ensureInitialized()
-  +-- CShieldSdk.initialize(              // bắt buộc — trước runApp()
-  |     loadAppThreatPopup: ...,          //   tuỳ chọn — override text popup load-app
-  |     onLoadAppThreat: ...,             //   tuỳ chọn — nhận notify load-app (best-effort, log)
-  |   )
+  +-- CShieldSdk.initialize()            // bắt buộc — trước runApp()
+  +-- CShieldSdk.setThreatListener(...)   // tuỳ chọn — nhận load-time threats
   +-- CShieldSSL.configure(pins, host)   // nếu dùng certificate pinning
   +-- runApp()
 
