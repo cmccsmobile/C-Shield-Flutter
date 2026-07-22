@@ -14,5 +14,8 @@
 ## 1.0.4
 - Update AIP logic, update IOS integration document
 
-## 1.0.5
+# 1.0.5
 - Update certificate pinning logic
+
+# 1.0.6
+- Updadte load app and run app threat detected callback

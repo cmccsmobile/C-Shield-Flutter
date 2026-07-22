@@ -1,0 +1,124 @@
+group = "com.cmc.c_shield_sdk"
+version = "1.0-SNAPSHOT"
+
+buildscript {
+    ext.kotlin_version = "2.1.0"
+    repositories {
+        google()
+        mavenCentral()
+    }
+
+    dependencies {
+        classpath("com.android.tools.build:gradle:8.9.1")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version")
+    }
+}
+
+// Capture plugin's own android dir before entering allprojects scope.
+// gradle.allprojects propagates local-repo to ALL projects in the build
+// (including consumer app's :app module), so no extra Gradle config needed.
+def pluginAndroidDir = project.projectDir
+
+gradle.allprojects {
+    repositories {
+        google()
+        mavenCentral()
+        maven {
+            url = uri("$pluginAndroidDir/local-repo")
+        }
+    }
+}
+
+apply plugin: "com.android.library"
+apply plugin: "kotlin-android"
+
+// Locate c-shield-sdk-<variant>.aar — two possible locations:
+//   1. android/libs/  (plugin development, local build)
+//   2. <consumer-app>/android/app/libs/  (customer integration via pub.dev)
+def resolveAarForVariant(String variant) {
+    def localAar = file("${project.projectDir}/libs/c-shield-sdk-${variant}.aar")
+    if (localAar.exists()) return localAar
+
+    def consumerAar = new File(rootProject.projectDir, "app/libs/c-shield-sdk-${variant}.aar")
+    if (consumerAar.exists()) return consumerAar
+
+    return null
+}
+
+// Fail early with a clear message if either AAR variant is not found
+tasks.named("preBuild").configure {
+    doFirst {
+        ["debug", "release"].each { variant ->
+            if (resolveAarForVariant(variant) == null) {
+                throw new GradleException("""
+================================================================================
+❌  c-shield-sdk-${variant}.aar not found!
+
+    Place both AAR variants in your Android app's libs folder:
+      android/app/libs/c-shield-sdk-debug.aar
+      android/app/libs/c-shield-sdk-release.aar
+
+    Then declare them in android/app/build.gradle:
+      dependencies {
+          debugImplementation(files("libs/c-shield-sdk-debug.aar"))
+          releaseImplementation(files("libs/c-shield-sdk-release.aar"))
+      }
+
+    Contact CMC to obtain the AARs built for your app's signing certificate.
+================================================================================
+""")
+            }
+        }
+    }
+}
+
+android {
+    namespace = "com.cmc.c_shield_sdk"
+
+    compileSdk = 34
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
+    }
+
+    kotlinOptions {
+        jvmTarget = JavaVersion.VERSION_11
+    }
+
+    sourceSets {
+        main.java.srcDirs += "src/main/kotlin"
+        test.java.srcDirs += "src/test/kotlin"
+    }
+
+    defaultConfig {
+        minSdk = 24
+    }
+
+    dependencies {
+        testImplementation("org.jetbrains.kotlin:kotlin-test")
+        testImplementation("org.mockito:mockito-core:5.0.0")
+
+        // Use the matching AAR variant on the compile classpath so the plugin's
+        // bridge code always compiles against the same binary the consumer ships.
+        debugCompileOnly(files(resolveAarForVariant("debug")))
+        releaseCompileOnly(files(resolveAarForVariant("release")))
+        // OkHttp is declared as 'runtime' scope in the AAR POM, so it does not land on the
+        // compile classpath automatically. We need it here to compile our bridge code that
+        // calls AIPCore.normalizeBodyForSigning(okhttp3.Request) and builds OkHttpClient.
+        // Version must match what the AAR bundles (declared in its POM).
+        implementation("com.squareup.okhttp3:okhttp:4.11.0")
+    }
+
+    testOptions {
+        unitTests.all {
+            useJUnitPlatform()
+
+            testLogging {
+               events "passed", "skipped", "failed", "standardOut", "standardError"
+               outputs.upToDateWhen {false}
+               showStandardStreams = true
+            }
+        }
+    }
+}
