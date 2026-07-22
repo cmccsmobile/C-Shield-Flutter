@@ -16,3 +16,9 @@
 
 ## 1.0.5
 - Update certificate pinning logic
+
+# 1.0.6
+- Update load app and run app threat detected callback
+
+# 1.0.7
+- Update load app and run app threat detected callback and ssl pinning 

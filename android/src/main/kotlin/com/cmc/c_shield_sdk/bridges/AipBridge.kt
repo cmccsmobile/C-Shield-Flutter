@@ -33,9 +33,9 @@ class AipBridge(private val context: Context) {
             try {
                 val signature = AIPCore.sign(context, payload)
                 mainHandler.post { result.success(signature) }
-            } catch (e: CShieldException) {
-                mainHandler.post { result.error(CShieldErrorCode.AIP_PROXY_CA, e.message, null) }
-            } catch (e: Exception) {
+//            } catch (e: CShieldException) {
+//                mainHandler.post { result.error(CShieldErrorCode.AIP_PROXY_CA, e.message, null) }
+            } catch (e: Throwable) {
                 mainHandler.post { result.error(CShieldErrorCode.AIP_SIGNING_FAILED, e.message, null) }
             }
         }.start()
@@ -54,9 +54,9 @@ class AipBridge(private val context: Context) {
                     if (valid) result.success(null)
                     else result.error(CShieldErrorCode.AIP_INVALID_SIGNATURE, "Signature verification failed", null)
                 }
-            } catch (e: CShieldException) {
-                mainHandler.post { result.error(CShieldErrorCode.AIP_PROXY_CA, e.message, null) }
-            } catch (e: Exception) {
+//            } catch (e: CShieldException) {
+//                mainHandler.post { result.error(CShieldErrorCode.AIP_PROXY_CA, e.message, null) }
+            } catch (e: Throwable) {
                 mainHandler.post { result.error(CShieldErrorCode.NATIVE_ERROR, e.message, null) }
             }
         }.start()

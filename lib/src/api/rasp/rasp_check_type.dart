@@ -6,56 +6,50 @@ sealed class RASPCheckType {
   String get key;
 
   static RASPCheckType fromKey(String k) => switch (k) {
-        // Debugger
-        'DebuggerOverviewCheck' => const DebuggerOverview(),
-        'Debuggable' => const Debuggable(),
-        'DebuggerConnected' => const DebuggerConnected(),
-        // Root (Android)
-        'RootCheckOverview' => const RootOverview(),
-        'SuperSu' => const SuperSu(),
-        'Magisk' => const Magisk(),
-        'SysWritable' => const SysWritable(),
-        'HasProperties' => const HasProperties(),
-        'KernelSUorAPatch' => const KernelSUorAPatch(),
-        // Emulator / Simulator
-        'EmulatorOverviewCheck' => const EmulatorOverview(),
-        'AvdDevice' => const AvdDevice(),
-        'AvdHardware' => const AvdHardware(),
-        'Genymotion' => const Genymotion(),
-        'Nox' => const Nox(),
-        'Memu' => const Memu(),
-        'Bluestacks' => const Bluestacks(),
-        'GoogleEmulator' => const GoogleEmulator(),
-        'FingerprintFromEmulator' => const FingerprintFromEmulator(),
-        'SensorsFromEmulator' => const SensorsFromEmulator(),
-        'SuspiciousFiles' => const SuspiciousFiles(),
-        'SuspiciousPackages' => const SuspiciousPackages(),
-        'SuspiciousQemuProperties' => const SuspiciousQemuProperties(),
-        'SuspiciousMounts' => const SuspiciousMounts(),
-        'SuspiciousCpu' => const SuspiciousCpu(),
-        'SuspiciousModules' => const SuspiciousModules(),
-        'SuspiciousRadioVersion' => const SuspiciousRadioVersion(),
-        'SimulatorCheck' => const SimulatorCheck(),
-        // Tampering (Android)
-        'TamperingCheckOverview' => const TamperingOverview(),
-        'InvalidCertificateIntegrity' => const InvalidCertificateIntegrity(),
-        'UntrustedStore' => const UntrustedStore(),
-        // Device Security State
-        'DeviceSecurityStateCheckOverview' => const DeviceSecurityStateOverview(),
-        'DeviceUnlocked' => const DeviceUnlocked(),
-        'HardwareBackedKeystoreUnavailable' =>
-          const HardwareBackedKeystoreUnavailable(),
-        'DeveloperModeOn' => const DeveloperModeOn(),
-        'AdbEnabled' => const AdbEnabled(),
-        'SystemVpnEnabled' => const SystemVpnEnabled(),
-        'AccessibilityServiceOn' => const AccessibilityServiceOn(),
-        // User CA
-        'UserCACheckOverview' => const UserCAOverview(),
-        'UserInstalledCA' => const UserInstalledCA(),
-        'InjectedSystemCA' => const InjectedSystemCA(),
-        'ProxyCA' => const ProxyCA(),
-        _ => UnknownCheckType(k),
-      };
+    // Debugger
+    'DebuggerOverviewCheck' => const DebuggerOverview(),
+    'Debuggable' => const Debuggable(),
+    'DebuggerConnected' => const DebuggerConnected(),
+    // Root (Android)
+    'RootCheckOverview' => const RootOverview(),
+    'SuperSu' => const SuperSu(),
+    'Magisk' => const Magisk(),
+    'SysWritable' => const SysWritable(),
+    'HasProperties' => const HasProperties(),
+    'KernelSUorAPatch' => const KernelSUorAPatch(),
+    // Emulator / Simulator
+    'EmulatorOverviewCheck' => const EmulatorOverview(),
+    'AvdDevice' => const AvdDevice(),
+    'AvdHardware' => const AvdHardware(),
+    'Genymotion' => const Genymotion(),
+    'Nox' => const Nox(),
+    'Memu' => const Memu(),
+    'Bluestacks' => const Bluestacks(),
+    'GoogleEmulator' => const GoogleEmulator(),
+    'FingerprintFromEmulator' => const FingerprintFromEmulator(),
+    'SensorsFromEmulator' => const SensorsFromEmulator(),
+    'SuspiciousFiles' => const SuspiciousFiles(),
+    'SuspiciousPackages' => const SuspiciousPackages(),
+    'SuspiciousQemuProperties' => const SuspiciousQemuProperties(),
+    'SuspiciousMounts' => const SuspiciousMounts(),
+    'SuspiciousCpu' => const SuspiciousCpu(),
+    'SuspiciousModules' => const SuspiciousModules(),
+    'SuspiciousRadioVersion' => const SuspiciousRadioVersion(),
+    'SimulatorCheck' => const SimulatorCheck(),
+    // Tampering (Android)
+    'TamperingCheckOverview' => const TamperingOverview(),
+    'InvalidCertificateIntegrity' => const InvalidCertificateIntegrity(),
+    'UntrustedStore' => const UntrustedStore(),
+    // Device Security State
+    'DeviceSecurityStateCheckOverview' => const DeviceSecurityStateOverview(),
+    'DeviceUnlocked' => const DeviceUnlocked(),
+    'HardwareBackedKeystoreUnavailable' => const HardwareBackedKeystoreUnavailable(),
+    'DeveloperModeOn' => const DeveloperModeOn(),
+    'AdbEnabled' => const AdbEnabled(),
+    'SystemVpnEnabled' => const SystemVpnEnabled(),
+    'AccessibilityServiceOn' => const AccessibilityServiceOn(),
+    _ => UnknownCheckType(k),
+  };
 }
 
 // --- Debugger ---
@@ -283,31 +277,6 @@ final class AccessibilityServiceOn extends RASPCheckType {
   const AccessibilityServiceOn();
   @override
   String get key => 'AccessibilityServiceOn';
-}
-
-// --- User CA ---
-final class UserCAOverview extends RASPCheckType {
-  const UserCAOverview();
-  @override
-  String get key => 'UserCACheckOverview';
-}
-
-final class UserInstalledCA extends RASPCheckType {
-  const UserInstalledCA();
-  @override
-  String get key => 'UserInstalledCA';
-}
-
-final class InjectedSystemCA extends RASPCheckType {
-  const InjectedSystemCA();
-  @override
-  String get key => 'InjectedSystemCA';
-}
-
-final class ProxyCA extends RASPCheckType {
-  const ProxyCA();
-  @override
-  String get key => 'ProxyCA';
 }
 
 // --- Fallback for unknown keys from native ---

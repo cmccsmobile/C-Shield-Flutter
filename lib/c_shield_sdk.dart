@@ -2,6 +2,7 @@ export 'src/api/c_shield_sdk.dart';
 export 'src/api/exceptions/c_shield_exception.dart';
 export 'src/api/rasp/load_app_threat_type.dart';
 export 'src/api/rasp/load_app_threat_event.dart';
+export 'src/api/rasp/threat_popup_text.dart';
 export 'src/api/rasp/rasp_checker.dart';
 export 'src/api/rasp/rasp_check_type.dart';
 export 'src/api/rasp/rasp_config.dart';

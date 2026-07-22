@@ -48,7 +48,7 @@ class RaspBridge(
                 ).build()
                 checkers[checkerId] = checker
                 mainHandler.post { result.success(checkerId) }
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 mainHandler.post { result.error(CShieldErrorCode.NATIVE_ERROR, e.message, null) }
             }
         }.start()
@@ -77,7 +77,7 @@ class RaspBridge(
                 )
             )
             result.success(null)
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             result.error(CShieldErrorCode.NATIVE_ERROR, e.message, null)
         }
     }
@@ -94,7 +94,7 @@ class RaspBridge(
                 // RASPResult is a sealed class of data objects — simpleName gives the object name.
                 val key = raspResult::class.simpleName ?: "Unknown"
                 mainHandler.post { result.success(key) }
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 mainHandler.post { result.error(CShieldErrorCode.NATIVE_ERROR, e.message, null) }
             }
         }.start()
@@ -140,7 +140,7 @@ class RaspBridge(
                     }
                 }
                 mainHandler.post { streamHandler.sendComplete(subscriptionId) }
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 mainHandler.post {
                     streamHandler.sendError(subscriptionId, CShieldErrorCode.NATIVE_ERROR, e.message ?: "subscribe failed")
                 }
@@ -182,7 +182,6 @@ class RaspBridge(
             tamperingDetectedAction = action("tamperingDetectedAction"),
             emulatorDetectedAction = action("emulatorDetectedAction"),
             deviceSecurityStateUnsafeDetectedAction = action("deviceSecurityStateUnsafeDetectedAction"),
-            userCADetectedAction = action("userCADetectedAction"),
         )
     }
 }

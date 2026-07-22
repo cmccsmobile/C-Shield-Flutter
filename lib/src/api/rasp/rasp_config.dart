@@ -13,7 +13,6 @@ class ThreatActionConfig {
   final ThreatDetectedAction tamperingDetectedAction;
   final ThreatDetectedAction emulatorDetectedAction;
   final ThreatDetectedAction deviceSecurityStateUnsafeDetectedAction;
-  final ThreatDetectedAction userCADetectedAction;
 
   const ThreatActionConfig({
     this.debuggerDetectedAction = ThreatDetectedAction.notifyApp,
@@ -21,6 +20,5 @@ class ThreatActionConfig {
     this.tamperingDetectedAction = ThreatDetectedAction.notifyApp,
     this.emulatorDetectedAction = ThreatDetectedAction.notifyApp,
     this.deviceSecurityStateUnsafeDetectedAction = ThreatDetectedAction.notifyApp,
-    this.userCADetectedAction = ThreatDetectedAction.notifyApp,
   });
 }

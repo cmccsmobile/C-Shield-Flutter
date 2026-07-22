@@ -1,6 +1,8 @@
 import 'dart:typed_data';
 
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
+import '../../api/rasp/load_app_threat_event.dart';
+import '../../api/rasp/threat_popup_text.dart';
 import 'c_shield_sdk_method_channel.dart';
 
 abstract class CShieldSdkPlatform extends PlatformInterface {
@@ -17,9 +19,13 @@ abstract class CShieldSdkPlatform extends PlatformInterface {
   }
 
   // ── SDK ──────────────────────────────────────────────────────────────────
-  Future<void> initialize() => throw UnimplementedError();
+  Future<void> initialize({
+    bool handleLoadAppThreat = false,
+    bool showLoadAppThreatPopup = true,
+    ThreatPopupText? loadAppThreatPopup,
+  }) => throw UnimplementedError();
 
-  // Stream<LoadAppThreatEvent> threatEvents() => throw UnimplementedError();
+  Stream<LoadAppThreatEvent> threatEvents() => throw UnimplementedError();
 
   // ── RASP ─────────────────────────────────────────────────────────────────
   Future<String> raspBuild({required Map<String, bool> flags}) =>

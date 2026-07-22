@@ -36,8 +36,7 @@ class RaspBridge {
         let checker = RASPChecker.Builder(
             checkDebugger:       flags["checkDebugger"] ?? true,
             simulator:           flags["emulator"] ?? true,
-            deviceSecurityState: flags["deviceSecurityState"] ?? true,
-            userCA:              flags["userCA"] ?? true
+            deviceSecurityState: flags["deviceSecurityState"] ?? true
         ).build()
         let id = UUID().uuidString
         checkers[id] = checker
@@ -107,8 +106,7 @@ class RaspBridge {
         return ThreatActionConfig(
             debuggerDetectedAction:                  action("debuggerDetectedAction"),
             simulatorDetectedAction:                 action("emulatorDetectedAction"),
-            deviceSecurityStateUnsafeDetectedAction: action("deviceSecurityStateUnsafeDetectedAction"),
-            userCADetectedAction:                    action("userCADetectedAction")
+            deviceSecurityStateUnsafeDetectedAction: action("deviceSecurityStateUnsafeDetectedAction")
         )
     }
 
@@ -126,7 +124,6 @@ extension RASPResult {
         case .debuggerFound:             return "DebuggerFound"
         case .simulatorFound:            return "SimulatorFound"
         case .deviceSecurityStateUnsafe: return "DeviceSecurityStateUnsafe"
-        case .userCADetected:            return "UserCADetected"
         }
     }
 }
@@ -137,7 +134,6 @@ extension RASPCheckType {
         case .debuggerCheck:            return "DebuggerOverviewCheck"
         case .simulatorCheck:           return "SimulatorCheck"
         case .deviceSecurityStateCheck: return "DeviceSecurityStateCheckOverview"
-        case .userCACheck:              return "UserCACheckOverview"
         }
     }
 }

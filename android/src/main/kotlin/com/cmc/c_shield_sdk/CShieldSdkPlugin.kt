@@ -7,7 +7,10 @@ import com.cmc.c_shield_sdk.bridges.AipBridge
 import com.cmc.c_shield_sdk.bridges.RaspBridge
 import com.cmc.c_shield_sdk.bridges.SslBridge
 import com.cmc.c_shield_sdk.streams.RaspEventStreamHandler
+import com.cmc.c_shield_sdk.streams.ThreatEventStreamHandler
 import com.example.c_shield_sdk.CShieldSDK
+import com.example.c_shield_sdk.loadAppThreat.LoadAppThreatListener
+import com.example.c_shield_sdk.loadAppThreat.LoadAppThreatReaction
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
@@ -25,6 +28,7 @@ class CShieldSdkPlugin : FlutterPlugin, MethodCallHandler {
     private lateinit var raspBridge: RaspBridge
     private lateinit var sslBridge: SslBridge
     private lateinit var aipBridge: AipBridge
+    private lateinit var threatStreamHandler: ThreatEventStreamHandler
 
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -32,7 +36,7 @@ class CShieldSdkPlugin : FlutterPlugin, MethodCallHandler {
         context = binding.applicationContext
 
         val raspStreamHandler = RaspEventStreamHandler()
-        //        val threatStreamHandler = ThreatEventStreamHandler()
+        threatStreamHandler = ThreatEventStreamHandler()
 
         channel = MethodChannel(binding.binaryMessenger, "c_shield_sdk")
         raspEventChannel = EventChannel(binding.binaryMessenger, "c_shield_sdk/rasp_events")
@@ -44,19 +48,46 @@ class CShieldSdkPlugin : FlutterPlugin, MethodCallHandler {
 
         channel.setMethodCallHandler(this)
         raspEventChannel.setStreamHandler(raspStreamHandler)
-        //        threatEventChannel.setStreamHandler(threatStreamHandler)
+        threatEventChannel.setStreamHandler(threatStreamHandler)
     }
 
     override fun onMethodCall(call: MethodCall, result: Result) {
         when {
             call.method == "sdk.initialize" -> {
+                // Reaction = what shows on screen. Flutter can only reach the
+                // built-in popup (with optional title/description) or None;
+                // CustomActivity is a native-only branch that never crosses the
+                // channel. The kill itself is not affected by any of this.
+                val reaction = when (call.argument<String>("loadAppThreatReaction")) {
+                    "none" -> LoadAppThreatReaction.None
+                    else -> {
+                        val popup = call.argument<Map<String, Any?>>("loadAppThreatPopup")
+                        LoadAppThreatReaction.DefaultPopup(
+                            popup?.get("title") as? String,
+                            popup?.get("description") as? String,
+                        )
+                    }
+                }
+
+                // Dart can opt into being notified of load-time threats. The
+                // notification is best-effort — the native loader kills the
+                // process right after this returns — so it is for logging only.
+                val notifyDart = call.argument<Boolean>("handleLoadAppThreat") ?: false
+                val listener = if (notifyDart) {
+                    object : LoadAppThreatListener {
+                        override fun onLoadAppThreatDetected(threatType: Int) {
+                            threatStreamHandler.emit(threatType)
+                        }
+                    }
+                } else null
+
                 Thread {
                     try {
-                        CShieldSDK.initialize(context)
+                        CShieldSDK.initialize(context, reaction, listener)
                         mainHandler.post {
                             result.success(null)
                         }
-                    } catch (e: Exception) {
+                    } catch (e: Throwable) {
                         mainHandler.post {
                             result.error(
                                 CShieldErrorCode.NATIVE_ERROR,

@@ -3,8 +3,9 @@ import 'dart:typed_data';
 import 'package:flutter/services.dart';
 import '../channels.dart';
 import '../codec/error_codec.dart';
-// import '../../api/rasp/load_app_threat_event.dart';
-// import '../../api/rasp/load_app_threat_type.dart';
+import '../../api/rasp/load_app_threat_event.dart';
+import '../../api/rasp/load_app_threat_type.dart';
+import '../../api/rasp/threat_popup_text.dart';
 import 'c_shield_sdk_platform_interface.dart';
 
 class MethodChannelCShieldSdk extends CShieldSdkPlatform {
@@ -20,19 +21,30 @@ class MethodChannelCShieldSdk extends CShieldSdkPlatform {
   }
 
   @override
-  Future<void> initialize() => _invoke(CShieldChannels.sdkInitialize);
+  Future<void> initialize({
+    bool handleLoadAppThreat = false,
+    bool showLoadAppThreatPopup = true,
+    ThreatPopupText? loadAppThreatPopup,
+  }) =>
+      _invoke(CShieldChannels.sdkInitialize, {
+        'handleLoadAppThreat': handleLoadAppThreat,
+        // Flutter can only express two reaction branches; customActivity /
+        // customViewController are native-only and never cross the channel.
+        'loadAppThreatReaction': showLoadAppThreatPopup ? 'defaultPopup' : 'none',
+        'loadAppThreatPopup': loadAppThreatPopup?.toMap(),
+      });
 
-  // @override
-  // Stream<LoadAppThreatEvent> threatEvents() {
-  //   return const EventChannel(CShieldChannels.threatEventChannel)
-  //       .receiveBroadcastStream()
-  //       .map((raw) {
-  //     final map = Map<String, dynamic>.from(raw as Map);
-  //     return LoadAppThreatEvent(
-  //       threatType: LoadAppThreatType.fromInt(map['threatType'] as int),
-  //     );
-  //   });
-  // }
+  @override
+  Stream<LoadAppThreatEvent> threatEvents() {
+    return const EventChannel(CShieldChannels.threatEventChannel)
+        .receiveBroadcastStream()
+        .map((raw) {
+      final map = Map<String, dynamic>.from(raw as Map);
+      return LoadAppThreatEvent(
+        threatType: LoadAppThreatType.fromInt(map['threatType'] as int),
+      );
+    });
+  }
 
   // ── RASP ─────────────────────────────────────────────────────────────────
 

@@ -44,7 +44,7 @@ class SslBridge {
         try {
             CShieldSSL.configure(pins = pins, hostname = hostname)
             result.success(null)
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             result.error(CShieldErrorCode.NATIVE_ERROR, e.message, null)
         }
     }
@@ -59,7 +59,7 @@ class SslBridge {
             result.success(null)
         } catch (e: IllegalStateException) {
             result.error(CShieldErrorCode.SSL_NOT_CONFIGURED, e.message, null)
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             result.error(CShieldErrorCode.NATIVE_ERROR, e.message, null)
         }
     }
@@ -91,7 +91,7 @@ class SslBridge {
             result.success(true)
         } catch (e: CertificateException) {
             result.success(false)
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             result.error(CShieldErrorCode.NATIVE_ERROR, e.message, null)
         }
     }
@@ -158,7 +158,7 @@ class SslBridge {
                 mainHandler.post {
                     result.error(CShieldErrorCode.SSL_PIN_MISMATCH, e.message ?: "Certificate pin mismatch", null)
                 }
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 mainHandler.post { result.error(CShieldErrorCode.NATIVE_ERROR, e.message, null) }
             }
         }
